@@ -1,0 +1,6 @@
+{
+  "name": "SentinelCVE 漏洞監控與即時警報系統",
+  "description": "自動搜尋各大產品 CVE 漏洞資訊、透過 Gemini 智慧分析威脅等級與修補建議，並提供多元頻道即時警報之企業級資安監控平台。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

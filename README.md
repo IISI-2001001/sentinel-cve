@@ -1,0 +1,252 @@
+# SentinelCVE 漏洞監控與即時警報系統 (SentinelCVE Security Engine)
+
+企業級資安漏洞監控平台：自動同步全球權威 CVE/NVD/CISA KEV 漏洞資訊、透過 Gemini 與 Multi-LLM 智慧分析威脅等級與命令列修補建議，並提供 MS Teams Webhook、全域 Email (SMTP) 即時警報與自動化處置工單聯防。
+
+---
+
+## 📖 目錄 (Table of Contents)
+
+1. [系統核心功能概覽](#-系統核心功能概覽)
+2. [前後端系統架構說明](#-前後端系統架構說明)
+   - [前端架構 (Frontend)](#前端架構-frontend)
+   - [後端架構 (Backend)](#後端架構-backend)
+   - [資料流與背景排程 Worker](#資料流與背景排程-worker)
+3. [環境變數配置 (Environment Variables)](#-環境變數配置-environment-variables)
+4. [Docker 容器化與建構說明](#-docker-容器化與建構說明)
+   - [多階段建構 Dockerfile](#多階段建構-dockerfile)
+   - [Docker Compose 服務配置](#docker-compose-服務配置)
+5. [Docker 部署、建置與重建指令指南](#-docker-部署建置與重建指令指南)
+   - [本地非容器化開發 (Local Dev)](#1-本地非容器化開發-local-dev)
+   - [使用 Docker Compose 一鍵啟動](#2-使用-docker-compose-一鍵啟動)
+   - [使用 Docker CLI 手動建置與執行](#3-使用-docker-cli-手動建置與執行)
+   - [完整容器重建與更新流程 (Rebuild Workflow)](#4-完整容器重建與更新流程-rebuild-workflow)
+   - [日誌查看與健康檢查 (Logs & Health check)](#5-日誌查看與健康檢查-logs--health-check)
+
+---
+
+## 🌟 系統核心功能概覽
+
+* **四大多維度管控頁面**：
+  * **總覽儀表板 (Dashboard)**：全站受監控資產、警報數量、CISA KEV 警告、CVSS 分數統計圖表與即時 Feed 檢視。
+  * **專案管理與工單中心 (Project Manager)**：專案團隊維護、產品版本與升級對照表 (Upgrade Matrix)、資安處置工單看板與 ⚡ AI 一鍵生成專案綜合處置工單。
+  * **系統管理與設定中心 (System Manager)**：集中管理「⏱️ 自動排程」、「📦 監控資產產品 (.txt/CPE 批次匯入)」、「✉️ 全域 Email SMTP」、「💬 MS Teams Webhook 通報」、「📋 系統稽核日誌」與「🤖 AI 工具與 LLM 選擇」。
+  * **系統說明與專業名詞手冊 (Documentation)**：完整收錄 CVE/CPE/CVSS 名詞解釋、NVD/CISA KEV/OSV/EPSS 權威數據源說明、4 種弱點查找與派單 SOP、自動化聯防管道與 FAQ。
+* **生成式 AI 資安推演引擎**：
+  * 支援 **Google Gemini**、OpenAI GPT-4o、Anthropic Claude 3.7 或地端 **Ollama**。
+  * 自動將原始英文 CVE 分析為繁體中文之「漏洞根因」、「攻擊衝擊」、「CLI Command-line Workaround 修補指令」與「掃描複測步驟」。
+* **自動閉環聯防與告警**：
+  * 支援排程定時自動比對資產、自動生成資安處置工單。
+  * 即時發送具備 MessageCard 格式之 MS Teams Webhook 通知與企業 Email 派報。
+
+---
+
+## 🏗️ 前後端系統架構說明
+
+SentinelCVE 採用 **Full-Stack (Node.js/Express + React/Vite)** 一體化架構，開發時透過 TSX/Vite Middleware 提供熱重載，生產環境則經由 esbuild 打包為高效獨立運行的 CommonJS 單一服務 (`dist/server.cjs`)。
+
+```
+                       ┌─────────────────────────────────────────────────┐
+                       │          Client Browser (User Interface)        │
+                       └────────────────────────┬────────────────────────┘
+                                                │
+                                    REST API / HTTP (Port 3000)
+                                                │
+                       ┌────────────────────────▼────────────────────────┐
+                       │          Express Server (dist/server.cjs)       │
+                       ├─────────────────────────────────────────────────┤
+                       │  • Middleware & Static Asset Handler            │
+                       │  • RESTful API Routes (/api/*)                  │
+                       │  • Internal Security Storage State              │
+                       │  • Background Scheduler Engine (30s Polling)  │
+                       └───────────┬─────────────────────────┬───────────┘
+                                   │                         │
+            ┌──────────────────────▼──────┐           ┌──────▼─────────────────────┐
+            │   External Security APIs    │           │    AI & Notification APIs  │
+            ├─────────────────────────────┤           ├────────────────────────────┤
+            │ • NIST NVD API v2.0         │           │ • Google Gemini API        │
+            │ • CISA KEV Feed             │           │ • MS Teams Webhook         │
+            │ • FIRST EPSS / OSV.dev      │           │ • Enterprise SMTP Server   │
+            └─────────────────────────────┘           └────────────────────────────┘
+```
+
+### 前端架構 (Frontend)
+
+* **核心技術**：React 19, TypeScript, Vite, Tailwind CSS v4, Lucide Icons, Motion (Framer Motion).
+* **模組劃分 (`/src/components/`)**：
+  * `App.tsx`：應用程式主要進入點，控管頂部導覽列狀態、數據載入與全局 Modal 狀態。
+  * `Navbar.tsx`：頂部導覽列，提供 4 大頁面切換、即時全站掃描按鈕與未讀警報通知 Dropdown。
+  * `Dashboard.tsx`：總覽儀表板，提供核心 KPI 數據、風險指數圓餅圖與最新監控 Feed。
+  * `ProjectManager.tsx`：專案管理、產品升級版本矩陣對照表、處置工單 Kanban 看板與 AI 綜合工單產出。
+  * `SystemManager.tsx`：系統整合管理大廳，收納排程設定、監控資產產品、SMTP 郵件伺服器、Teams Webhook、稽核日誌與 AI 引擎選擇。
+  * `ProductManager.tsx` (嵌入於 SystemManager)：資產產品清單維護、.txt CPE 檔案批次解析匯入、AI 升級檢測與個別資產弱點比對。
+  * `SystemLogs.tsx` (嵌入於 SystemManager)：系統操作與排程稽核軌跡 Audit Log。
+  * `Documentation.tsx`：完整系統文件與互動式專業名詞對照。
+  * `CveDetailModal.tsx` / `TicketDetailModal.tsx`：CVE 漏洞威脅剖析與工單詳細內容與 Email 測試發送 Modal。
+
+### 後端架構 (Backend)
+
+* **核心技術**：Node.js 20, Express.js 4, esbuild (打包腳本), TSX.
+* **後端核心職責 (`server.ts`)**：
+  1. **API 服務**：暴露完整 RESTful API endpoints（`/api/dashboard/stats`, `/api/cves`, `/api/products`, `/api/projects`, `/api/tickets`, `/api/schedule`, `/api/system/*`）。
+  2. **跨港即時檢索與比對**：封裝 NVD API v2.0 與區域快取檢索邏輯，模糊比對資產 CPE 與 CVE 衝擊版本。
+  3. **AI 語言模型整合**：封裝 `@google/genai` 呼叫邏輯，處理威脅推演與修補指令生成。
+  4. **告警推播**：封裝 MS Teams MessageCard 格式 HTTP POST 與 Nodemailer/SMTP 郵件發送邏輯。
+
+### 資料流與背景排程 Worker
+
+* **Background Scheduler Engine**：
+  * `server.ts` 啟動後會在背景啟動一個每 30 秒執行一次的非同步 Daemon 輪詢器。
+  * **全域系統自動排程**：可在「系統管理 > ⏱️ 自動排程」頁面靈活調整全域掃描週期（**15 分鐘、30 分鐘、1 小時、6 小時、24 小時**）與掃描資產範疇（全部資產 / 僅限 Critical & High）。
+  * **個別產品獨立週期**：亦可在「系統管理 > 📦 監控資產產品」設定個別產品的 `scanIntervalMinutes`（預設 30 分鐘）。
+  * **自動告警與派報**：每當達到排程時間，背景 Worker 會自動調用 NVD/OSV API 發起弱點檢索；若比對到符合條件的高危漏洞（如 CVSS $\ge$ 7.0），將自動觸發 Teams Webhook 即時推播、發送 Email 通知，並寫入系統 Audit Log。
+
+---
+
+## 🔑 環境變數配置 (Environment Variables)
+
+請於專案根目錄參考 `.env.example` 建立 `.env` 檔案：
+
+```env
+# Gemini API Key (用於生成式 AI 漏洞解析與處置工單推演)
+GEMINI_API_KEY="your_gemini_api_key_here"
+
+# 服務執行埠號 (預設為 3000)
+PORT=3000
+
+# 執行環境 (development / production)
+NODE_ENV=production
+
+# 應用程式對外網址
+APP_URL="http://localhost:3000"
+```
+
+---
+
+## 🐳 Docker 容器化與建構說明
+
+本專案提供符合資安規範與效能最佳化的 Dockerfile 與 Docker Compose 配置。
+
+### 多階段建構 Dockerfile
+
+Dockerfile 採用 Alpine 輕量化雙階段建構 (Multi-stage Build)：
+1. **Stage 1 (`builder`)**：使用 `node:20-alpine` 安裝全套依賴，執行 `npm run build`。打包產出 Vite 前端靜態檔案與 CommonJS 後端檔 `dist/server.cjs`。
+2. **Stage 2 (`runner`)**：使用純淨 `node:20-alpine`，僅包含運行所需之 production dependencies，複製 `dist/`，以非 Root 使用者 (`USER node`) 執行，提升容器防護性。設定 `HEALTHCHECK` 定時確認 `/api/health` 狀態。
+
+### Docker Compose 服務配置
+
+`docker-compose.yml` 預設掛載埠號 `3000:3000`，並將環境變數帶入容器：
+
+```yaml
+version: '3.8'
+
+services:
+  sentinel-cve:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sentinel-cve-app
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+```
+
+---
+
+## 🛠️ Docker 部署、建置與重建指令指南
+
+### 1. 本地非容器化開發 (Local Dev)
+
+如果您希望直接在主機上執行：
+
+```bash
+# 安裝套件
+npm install
+
+# 啟動開發伺服器 (包含前端 Vite 與後端 TSX API)
+npm run dev
+```
+
+瀏覽器開啟 `http://localhost:3000` 即可訪問。
+
+---
+
+### 2. 使用 Docker Compose 一鍵啟動
+
+建議之標準正式部署方式：
+
+```bash
+# 1. 複製並設定環境變數
+cp .env.example .env
+# 請編輯 .env 填入正確的 GEMINI_API_KEY
+
+# 2. 啟動建置並背景執行容器
+docker-compose up -d --build
+```
+
+訪問 `http://localhost:3000` 即可登入使用。
+
+---
+
+### 3. 使用 Docker CLI 手動建置與執行
+
+若不使用 Docker Compose，可直接透過 `docker` 命令操作：
+
+```bash
+# 建置 Docker 映像檔
+docker build -t sentinel-cve:latest .
+
+# 執行容器 (帶入 GEMINI_API_KEY)
+docker run -d \
+  --name sentinel-cve-app \
+  -p 3000:3000 \
+  -e GEMINI_API_KEY="your_api_key_here" \
+  -e NODE_ENV=production \
+  --restart always \
+  sentinel-cve:latest
+```
+
+---
+
+### 4. 完整容器重建與更新流程 (Rebuild Workflow)
+
+當程式碼更新或設定變更，需要進行升級重建時，請執行以下步驟：
+
+```bash
+# 步驟 1: 停止並移除舊有容器與網路
+docker-compose down
+
+# 步驟 2: 強制重新建置映像檔並啟動容器
+docker-compose up -d --build --force-recreate
+
+# (可選) 清除舊有未使用的 Docker 快取與 Build 殘留
+docker image prune -f
+```
+
+---
+
+### 5. 日誌查看與健康檢查 (Logs & Health check)
+
+**查看即時應用程式與背景排程日誌**：
+```bash
+docker-compose logs -f sentinel-cve
+```
+
+**確認容器健康狀態 (Health status)**：
+```bash
+docker inspect --format='{{json .State.Health}}' sentinel-cve-app
+```
+
+**手動測試健康檢查 Endpoint**：
+```bash
+curl -I http://localhost:3000/api/health
+```
+若回傳 `HTTP/1.1 200 OK` 且包含 `{"status":"ok"}` 即代表服務正常運作！
