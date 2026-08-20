@@ -80,6 +80,31 @@ let currentAiConfig: AiConfig = {
 async function loadPersistedState() {
   try {
     const saved = await loadStateFromDb();
+    // Distinguish "database has never been persisted to" (fresh install: every
+    // collection/config comes back empty/undefined) from "database legitimately holds
+    // an empty collection" (e.g. the user deleted all products). Only in the former
+    // case do we keep the in-memory INITIAL_* seed data and write it to PostgreSQL now;
+    // otherwise we trust whatever PostgreSQL returned, even if some arrays are empty.
+    const hasAnyPersistedData =
+      (saved.products?.length ?? 0) > 0 ||
+      (saved.cvesDatabase?.length ?? 0) > 0 ||
+      (saved.rules?.length ?? 0) > 0 ||
+      (saved.notifications?.length ?? 0) > 0 ||
+      (saved.webhooks?.length ?? 0) > 0 ||
+      (saved.logs?.length ?? 0) > 0 ||
+      (saved.projects?.length ?? 0) > 0 ||
+      (saved.tickets?.length ?? 0) > 0 ||
+      Boolean(saved.emailConfig) ||
+      Boolean(saved.scheduleConfig) ||
+      Boolean(saved.teamsConfig) ||
+      Boolean(saved.currentAiConfig);
+
+    if (!hasAnyPersistedData) {
+      console.log('PostgreSQL has no persisted state yet; seeding it with the initial dataset.');
+      persistState();
+      return;
+    }
+
     if (Array.isArray(saved.products)) products = saved.products;
     if (Array.isArray(saved.cvesDatabase)) cvesDatabase = saved.cvesDatabase;
     if (Array.isArray(saved.rules)) rules = saved.rules;
