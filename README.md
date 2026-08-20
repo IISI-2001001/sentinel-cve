@@ -56,17 +56,19 @@ SentinelCVE 採用 **Full-Stack (Node.js/Express + React/Vite)** 一體化架構
                        ├─────────────────────────────────────────────────┤
                        │  • Middleware & Static Asset Handler            │
                        │  • RESTful API Routes (/api/*)                  │
-                       │  • Internal Security Storage State              │
-                       │  • Background Scheduler Engine (30s Polling)  │
-                       └───────────┬─────────────────────────┬───────────┘
-                                   │                         │
-            ┌──────────────────────▼──────┐           ┌──────▼─────────────────────┐
-            │   External Security APIs    │           │    AI & Notification APIs  │
-            ├─────────────────────────────┤           ├────────────────────────────┤
-            │ • NIST NVD API v2.0         │           │ • Google Gemini API        │
-            │ • CISA KEV Feed             │           │ • MS Teams Webhook         │
-            │ • FIRST EPSS / OSV.dev      │           │ • Enterprise SMTP Server   │
-            └─────────────────────────────┘           └────────────────────────────┘
+                       │  • Background Scheduler Engine (30s Polling)    │
+                       └───────────┬─────────────┬───────────────────────┘
+                                   │             │
+                       ┌───────────▼──┐   ┌──────▼──────────────────────┐
+                       │  PostgreSQL   │   │      External APIs          │
+                       │ (Application  │   ├──────────────────────────────
+                       │  State Store) │   │ • NIST NVD API v2.0
+                       └───────────────┘   │ • CISA KEV Feed
+                                           │ • FIRST EPSS / OSV.dev
+                                           │ • Google Gemini API
+                                           │ • MS Teams Webhook
+                                           │ • Enterprise SMTP Server
+                                           └──────────────────────────────
 ```
 
 ### 前端架構 (Frontend)
@@ -85,12 +87,13 @@ SentinelCVE 採用 **Full-Stack (Node.js/Express + React/Vite)** 一體化架構
 
 ### 後端架構 (Backend)
 
-* **核心技術**：Node.js 20, Express.js 4, esbuild (打包腳本), TSX.
+* **核心技術**：Node.js 20, Express.js 4, esbuild (打包腳本), TSX, **PostgreSQL 16 (`pg` driver)**。
 * **後端核心職責 (`server.ts`)**：
   1. **API 服務**：暴露完整 RESTful API endpoints（`/api/dashboard/stats`, `/api/cves`, `/api/products`, `/api/projects`, `/api/tickets`, `/api/schedule`, `/api/system/*`）。
   2. **跨港即時檢索與比對**：封裝 NVD API v2.0 與區域快取檢索邏輯，模糊比對資產 CPE 與 CVE 衝擊版本。
   3. **AI 語言模型整合**：封裝 `@google/genai` 呼叫邏輯，處理威脅推演與修補指令生成。
   4. **告警推播**：封裝 MS Teams MessageCard 格式 HTTP POST 與 Nodemailer/SMTP 郵件發送邏輯。
+  5. **資料持久化 (`src/server/db.ts`)**：應用程式狀態（監控產品、CVE 資料庫、警報規則、通知、Webhook、稽核日誌、專案、工單、AI/Email/Teams/排程設定）全部以 PostgreSQL 儲存，每個集合對應一張資料表，主要欄位另外抽出做索引（如 `severity`、`cisa_kev`、`status`），完整物件則存於 `data JSONB` 欄位，服務啟動時整批載入記憶體、每次異動即整批寫回資料庫（Transaction 包裹，確保一致性）。
 
 ### 資料流與背景排程 Worker
 
@@ -118,6 +121,13 @@ NODE_ENV=production
 
 # 應用程式對外網址
 APP_URL="http://localhost:3000"
+
+# PostgreSQL 連線字串 (應用程式狀態資料庫：產品、CVE、工單、專案、日誌等)
+# 使用 docker-compose 時會自動組裝好，僅在連接外部/既有 PostgreSQL 時才需覆寫。
+DATABASE_URL="postgres://sentinel:sentinel@localhost:5432/sentinel_cve"
+POSTGRES_USER="sentinel"
+POSTGRES_PASSWORD="sentinel"
+POSTGRES_DB="sentinel_cve"
 ```
 
 ---
@@ -134,29 +144,50 @@ Dockerfile 採用 Alpine 輕量化雙階段建構 (Multi-stage Build)：
 
 ### Docker Compose 服務配置
 
-`docker-compose.yml` 預設掛載埠號 `3000:3000`，並將環境變數帶入容器：
+`docker-compose.yml` 內含 `postgres`（PostgreSQL 16，資料存於具名 volume `pgdata`，並以 `pg_isready` 做健康檢查）與 `sentinel-cve`（Express 應用程式，`depends_on` 等待資料庫健康後才啟動）兩個服務：
 
 ```yaml
-version: '3.8'
-
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sentinel-cve-db
+    restart: always
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-sentinel}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-sentinel}
+      - POSTGRES_DB=${POSTGRES_DB:-sentinel_cve}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sentinel} -d ${POSTGRES_DB:-sentinel_cve}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   sentinel-cve:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: sentinel-cve-app
     restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=production
       - PORT=3000
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - DATABASE_URL=postgres://${POSTGRES_USER:-sentinel}:${POSTGRES_PASSWORD:-sentinel}@postgres:5432/${POSTGRES_DB:-sentinel_cve}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
+
+volumes:
+  pgdata:
 ```
 
 ---
@@ -165,17 +196,25 @@ services:
 
 ### 1. 本地非容器化開發 (Local Dev)
 
-如果您希望直接在主機上執行：
+如果您希望直接在主機上執行，需先準備一個可連線的 PostgreSQL（本機安裝或用 Docker 快速起一個都可以）：
 
 ```bash
+# 快速啟動一個本機測試用 PostgreSQL 容器
+docker run -d --name sentinel-cve-db -p 5432:5432 \
+  -e POSTGRES_USER=sentinel -e POSTGRES_PASSWORD=sentinel -e POSTGRES_DB=sentinel_cve \
+  postgres:16-alpine
+
 # 安裝套件
 npm install
+
+# 設定 .env（至少要有 DATABASE_URL 指向上面的 PostgreSQL）
+cp .env.example .env
 
 # 啟動開發伺服器 (包含前端 Vite 與後端 TSX API)
 npm run dev
 ```
 
-瀏覽器開啟 `http://localhost:3000` 即可訪問。
+瀏覽器開啟 `http://localhost:3000` 即可訪問。伺服器啟動時會自動建立所需的資料表 (`CREATE TABLE IF NOT EXISTS`)，無需另外執行 migration。
 
 ---
 
@@ -198,18 +237,27 @@ docker-compose up -d --build
 
 ### 3. 使用 Docker CLI 手動建置與執行
 
-若不使用 Docker Compose，可直接透過 `docker` 命令操作：
+若不使用 Docker Compose，可直接透過 `docker` 命令操作，但需自行先啟動一個 PostgreSQL 並建立共用網路：
 
 ```bash
+# 建立共用網路，並啟動 PostgreSQL 容器
+docker network create sentinel-net
+docker run -d --name sentinel-cve-db --network sentinel-net \
+  -e POSTGRES_USER=sentinel -e POSTGRES_PASSWORD=sentinel -e POSTGRES_DB=sentinel_cve \
+  -v sentinel-cve-pgdata:/var/lib/postgresql/data \
+  postgres:16-alpine
+
 # 建置 Docker 映像檔
 docker build -t sentinel-cve:latest .
 
-# 執行容器 (帶入 GEMINI_API_KEY)
+# 執行容器 (帶入 GEMINI_API_KEY 與 DATABASE_URL)
 docker run -d \
   --name sentinel-cve-app \
+  --network sentinel-net \
   -p 3000:3000 \
   -e GEMINI_API_KEY="your_api_key_here" \
   -e NODE_ENV=production \
+  -e DATABASE_URL="postgres://sentinel:sentinel@sentinel-cve-db:5432/sentinel_cve" \
   --restart always \
   sentinel-cve:latest
 ```

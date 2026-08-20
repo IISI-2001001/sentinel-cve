@@ -1,11 +1,11 @@
 import express from 'express';
 import path from 'path';
-import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import nodemailer from 'nodemailer';
 import { getLatestVersion, getProductVulnerabilities, resolveSourceType } from './src/server/productProviders.js';
 import { PRODUCT_CATALOG, enrichProductFromCatalog } from './src/server/productCatalog.js';
+import { initDb, loadPersistedState as loadStateFromDb, persistState as persistStateToDb } from './src/server/db.js';
 import {
   INITIAL_PRODUCTS,
   INITIAL_CVES,
@@ -74,28 +74,12 @@ let currentAiConfig: AiConfig = {
   customSystemPrompt: '',
 };
 
-const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
-const STATE_FILE = path.join(DATA_DIR, 'state.json');
-
-type PersistedState = {
-  products: MonitoredProduct[];
-  cvesDatabase: CVEItem[];
-  rules: AlertRule[];
-  notifications: AlertNotification[];
-  webhooks: WebhookConfig[];
-  logs: ScanLog[];
-  projects: Project[];
-  emailConfig: EmailNotificationConfig;
-  tickets: Ticket[];
-  scheduleConfig: ScheduleConfig;
-  teamsConfig: TeamsNotificationConfig;
-  currentAiConfig: AiConfig;
-};
-
-function loadPersistedState() {
+// Application state (products, CVEs, tickets, ...) is persisted in PostgreSQL via
+// src/server/db.ts. loadPersistedState()/persistState() below keep the exact same
+// call sites/behavior as before, but read/write the database instead of a JSON file.
+async function loadPersistedState() {
   try {
-    if (!fs.existsSync(STATE_FILE)) return;
-    const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')) as Partial<PersistedState>;
+    const saved = await loadStateFromDb();
     if (Array.isArray(saved.products)) products = saved.products;
     if (Array.isArray(saved.cvesDatabase)) cvesDatabase = saved.cvesDatabase;
     if (Array.isArray(saved.rules)) rules = saved.rules;
@@ -109,26 +93,18 @@ function loadPersistedState() {
     if (saved.teamsConfig) teamsConfig = { ...teamsConfig, ...saved.teamsConfig };
     if (saved.currentAiConfig) currentAiConfig = { ...currentAiConfig, ...saved.currentAiConfig };
   } catch (err) {
-    console.error('Failed to load persisted state; using defaults:', err);
+    console.error('Failed to load persisted state from PostgreSQL; using defaults:', err);
   }
 }
 
+// Fire-and-forget wrapper kept synchronous at call sites (addLog, route handlers, ...)
+// exactly like the previous fs-based implementation; errors are logged, never thrown.
 function persistState() {
-  try {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    const state: PersistedState = {
-      products, cvesDatabase, rules, notifications, webhooks, logs, projects,
-      emailConfig, tickets, scheduleConfig, teamsConfig, currentAiConfig,
-    };
-    const temporaryFile = `${STATE_FILE}.tmp`;
-    fs.writeFileSync(temporaryFile, JSON.stringify(state, null, 2), { mode: 0o600 });
-    fs.renameSync(temporaryFile, STATE_FILE);
-  } catch (err) {
-    console.error('Failed to persist application state:', err);
-  }
+  void persistStateToDb({
+    products, cvesDatabase, rules, notifications, webhooks, logs, projects,
+    emailConfig, tickets, scheduleConfig, teamsConfig, currentAiConfig,
+  }).catch((err) => console.error('Failed to persist application state to PostgreSQL:', err));
 }
-
-loadPersistedState();
 
 function publicAiConfig(): AiConfig {
   return {
@@ -546,6 +522,9 @@ async function scanProductFromVerifiedSources(product: MonitoredProduct): Promis
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT || 3000);
+
+  await initDb();
+  await loadPersistedState();
 
   const frequencyMs = (frequency?: string) => ({
     REALTIME: 60_000,
