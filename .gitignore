@@ -1,5 +1,5 @@
 node_modules/
-data/
+/data/
 build/
 dist/
 coverage/
@@ -10,3 +10,4 @@ coverage/
 .ssh/
 *.pem
 *.key
+.vagrant/
