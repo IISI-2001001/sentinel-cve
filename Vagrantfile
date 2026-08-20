@@ -6,6 +6,8 @@ Vagrant.configure("2") do |config|
   config.vm.hostname = "sentinel-cve"
 
   config.vm.network "forwarded_port", guest: 3000, host: 3000
+  # Expose PostgreSQL so external DB clients (DBeaver/pgAdmin/psql) on the host can connect.
+  config.vm.network "forwarded_port", guest: 5432, host: 5432
 
   config.vm.provider "virtualbox" do |vb|
     vb.memory = 2048
