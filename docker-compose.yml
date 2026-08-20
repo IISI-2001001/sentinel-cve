@@ -7,6 +7,8 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-sentinel}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-sentinel}
       - POSTGRES_DB=${POSTGRES_DB:-sentinel_cve}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -32,6 +34,7 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - APP_URL=${APP_URL:-http://localhost:3000}
       - DATABASE_URL=postgres://${POSTGRES_USER:-sentinel}:${POSTGRES_PASSWORD:-sentinel}@postgres:5432/${POSTGRES_DB:-sentinel_cve}
+      - SEED_DEMO_DATA=${SEED_DEMO_DATA:-false}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
       interval: 30s

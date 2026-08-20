@@ -100,8 +100,22 @@ async function loadPersistedState() {
       Boolean(saved.currentAiConfig);
 
     if (!hasAnyPersistedData) {
-      console.log('PostgreSQL has no persisted state yet; seeding it with the initial dataset.');
-      persistState();
+      const seedDemoData = process.env.SEED_DEMO_DATA === 'true';
+      if (seedDemoData) {
+        console.log('PostgreSQL has no persisted state yet; seeding it with the initial demo dataset (SEED_DEMO_DATA=true).');
+        persistState();
+      } else {
+        console.log('PostgreSQL has no persisted state yet; starting with an empty dataset (set SEED_DEMO_DATA=true to load demo data).');
+        products = [];
+        cvesDatabase = [];
+        rules = [];
+        notifications = [];
+        webhooks = [];
+        logs = [];
+        projects = [];
+        tickets = [];
+        persistState();
+      }
       return;
     }
 
