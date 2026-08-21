@@ -42,21 +42,21 @@
 
 ## 🏗️ 前後端系統架構說明
 
-SentinelCVE 採用 **Full-Stack (Node.js/Express + React/Vite)** 一體化架構，開發時透過 TSX/Vite Middleware 提供熱重載，生產環境則經由 esbuild 打包為高效獨立運行的 CommonJS 單一服務 (`dist/server.cjs`)。
+SentinelCVE 採用 **Full-Stack (Java 21/Spring Boot 3 + React/Vite)** 一體化架構。前端開發時透過 Vite dev server 提供熱重載；生產環境則由 Multi-stage Dockerfile 建置 Vite 靜態檔案並打包進 Spring Boot 的可執行 Fat Jar (`sentinel-cve-server.jar`)，由內建 Tomcat 同時提供 REST API 與前端靜態資源。
 
 ```
                        ┌─────────────────────────────────────────────────┐
                        │          Client Browser (User Interface)        │
                        └────────────────────────┬────────────────────────┘
                                                 │
-                                    REST API / HTTP (Port 3000)
+                                    REST API / HTTP (Port 3000 → 8080)
                                                 │
                        ┌────────────────────────▼────────────────────────┐
-                       │          Express Server (dist/server.cjs)       │
+                       │   Spring Boot App (sentinel-cve-server.jar)     │
                        ├─────────────────────────────────────────────────┤
-                       │  • Middleware & Static Asset Handler            │
-                       │  • RESTful API Routes (/api/*)                  │
-                       │  • Background Scheduler Engine (30s Polling)    │
+                       │  • Embedded Tomcat & Static Asset Handler       │
+                       │  • RESTful API Controllers (/api/*)             │
+                       │  • Background Scheduler (@Scheduled, 30s tick)  │
                        └───────────┬─────────────┬───────────────────────┘
                                    │             │
                        ┌───────────▼──┐   ┌──────▼──────────────────────┐
@@ -87,18 +87,17 @@ SentinelCVE 採用 **Full-Stack (Node.js/Express + React/Vite)** 一體化架構
 
 ### 後端架構 (Backend)
 
-* **核心技術**：Node.js 20, Express.js 4, esbuild (打包腳本), TSX, **PostgreSQL 16 (`pg` driver)**。
-* **後端核心職責 (`server.ts`)**：
-  1. **API 服務**：暴露完整 RESTful API endpoints（`/api/dashboard/stats`, `/api/cves`, `/api/products`, `/api/projects`, `/api/tickets`, `/api/schedule`, `/api/system/*`）。
-  2. **跨港即時檢索與比對**：封裝 NVD API v2.0 與區域快取檢索邏輯，模糊比對資產 CPE 與 CVE 衝擊版本。
-  3. **AI 語言模型整合**：封裝 `@google/genai` 呼叫邏輯，處理威脅推演與修補指令生成。
-  4. **告警推播**：封裝 MS Teams MessageCard 格式 HTTP POST 與 Nodemailer/SMTP 郵件發送邏輯。
-  5. **資料持久化 (`src/server/db.ts`)**：應用程式狀態（監控產品、CVE 資料庫、警報規則、通知、Webhook、稽核日誌、專案、工單、AI/Email/Teams/排程設定）全部以 PostgreSQL 儲存，每個集合對應一張資料表，主要欄位另外抽出做索引（如 `severity`、`cisa_kev`、`status`），完整物件則存於 `data JSONB` 欄位，服務啟動時整批載入記憶體、每次異動即整批寫回資料庫（Transaction 包裹，確保一致性）。
+* **核心技術**：Java 21, Spring Boot 3 (Web / JDBC / Async / Scheduling), Maven, **PostgreSQL 16 (`postgresql` JDBC driver + HikariCP)**。
+* **模組劃分 (`java-backend/src/main/java/com/sentinelcve/`)**：
+  * `controller/*`：53 支 REST API endpoints（`/api/dashboard/stats`, `/api/cves`, `/api/products`, `/api/projects`, `/api/tickets`, `/api/schedule/*`, `/api/system/*` 等），逐一對應原 Node/Express 路由。
+  * `service/*`：核心業務邏輯，包含 `ScanService`（NVD/OSV 檢索與版本比對）、`AiService`（Multi-LLM 抽象層）、`MailService`（動態 SMTP 寄信）、`WebhookDispatchService`（Teams/Slack/自訂 Webhook）、`AlertRuleEngineService`（告警規則引擎）、`SchedulerService`（`@Scheduled` 背景排程）、`TicketService`（AI 工單生成）、`ProjectDigestService`（專案摘要通知）。
+  * `db/PersistenceRepository.java` + `config/DataSourceConfig.java`：應用程式狀態（監控產品、CVE 資料庫、警報規則、通知、Webhook、稽核日誌、專案、工單、AI/Email/Teams/排程設定）全部以 PostgreSQL 儲存，每個集合對應一張資料表，主要欄位另外抽出做索引（如 `severity`、`cisa_kev`、`status`），完整物件則存於 `data JSONB` 欄位（透過 `PGobject` 序列化），服務啟動時整批載入記憶體、每次異動即以 `@Async` 方式整批寫回資料庫（Transaction 包裹，確保一致性）。
+  * `model/*`：與前端 `src/types.ts` 對應之 20 個 Java Model（Jackson camelCase 序列化）。
 
 ### 資料流與背景排程 Worker
 
 * **Background Scheduler Engine**：
-  * `server.ts` 啟動後會在背景啟動一個每 30 秒執行一次的非同步 Daemon 輪詢器。
+  * `SchedulerService` 以 Spring 的 `@Scheduled(fixedDelay = 30000)` 註解實作，每 30 秒執行一次背景輪詢。
   * **全域系統自動排程**：可在「系統管理 > ⏱️ 自動排程」頁面靈活調整全域掃描週期（**15 分鐘、30 分鐘、1 小時、6 小時、24 小時**）與掃描資產範疇（全部資產 / 僅限 Critical & High）。
   * **個別產品獨立週期**：亦可在「系統管理 > 📦 監控資產產品」設定個別產品的 `scanIntervalMinutes`（預設 30 分鐘）。
   * **自動告警與派報**：每當達到排程時間，背景 Worker 會自動調用 NVD/OSV API 發起弱點檢索；若比對到符合條件的高危漏洞（如 CVSS $\ge$ 7.0），將自動觸發 Teams Webhook 即時推播、發送 Email 通知，並寫入系統 Audit Log。
@@ -113,11 +112,8 @@ SentinelCVE 採用 **Full-Stack (Node.js/Express + React/Vite)** 一體化架構
 # Gemini API Key (用於生成式 AI 漏洞解析與處置工單推演)
 GEMINI_API_KEY="your_gemini_api_key_here"
 
-# 服務執行埠號 (預設為 3000)
-PORT=3000
-
-# 執行環境 (development / production)
-NODE_ENV=production
+# 服務執行埠號 (容器內部埠號，預設為 8080；對外仍以 3000 訪問)
+PORT=8080
 
 # 應用程式對外網址
 APP_URL="http://localhost:3000"
@@ -138,13 +134,14 @@ POSTGRES_DB="sentinel_cve"
 
 ### 多階段建構 Dockerfile
 
-Dockerfile 採用 Alpine 輕量化雙階段建構 (Multi-stage Build)：
-1. **Stage 1 (`builder`)**：使用 `node:20-alpine` 安裝全套依賴，執行 `npm run build`。打包產出 Vite 前端靜態檔案與 CommonJS 後端檔 `dist/server.cjs`。
-2. **Stage 2 (`runner`)**：使用純淨 `node:20-alpine`，僅包含運行所需之 production dependencies，複製 `dist/`，以非 Root 使用者 (`USER node`) 執行，提升容器防護性。設定 `HEALTHCHECK` 定時確認 `/api/health` 狀態。
+Dockerfile (`java-backend/Dockerfile`) 採用三階段建構 (Multi-stage Build)：
+1. **Stage 1 (`frontend`)**：使用 `node:20-alpine` 安裝前端依賴並執行 `npm run build`，產出 Vite 靜態檔案 (`dist/`)。
+2. **Stage 2 (`backend`)**：使用 `maven:3.9-eclipse-temurin-21`，將 Stage 1 產出的靜態檔案複製進 `src/main/resources/static`，再執行 `mvn clean package` 打包成單一 Fat Jar (`sentinel-cve-server.jar`)。
+3. **Stage 3 (runtime)**：使用純淨 `eclipse-temurin:21-jre-alpine`，僅複製最終 Jar 檔案，以 `ENTRYPOINT ["java","-jar","/app/app.jar"]` 啟動，`EXPOSE 8080`，體積精簡且不含建構工具鏈。
 
 ### Docker Compose 服務配置
 
-`docker-compose.yml` 內含 `postgres`（PostgreSQL 16，資料存於具名 volume `pgdata`，並以 `pg_isready` 做健康檢查）與 `sentinel-cve`（Express 應用程式，`depends_on` 等待資料庫健康後才啟動）兩個服務：
+`docker-compose.yml` 內含 `postgres`（PostgreSQL 16，資料存於具名 volume `pgdata`，並以 `pg_isready` 做健康檢查）與 `sentinel-cve`（Spring Boot 應用程式，`depends_on` 等待資料庫健康後才啟動）兩個服務：
 
 ```yaml
 services:
@@ -167,21 +164,20 @@ services:
   sentinel-cve:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: java-backend/Dockerfile
     container_name: sentinel-cve-app
     restart: always
     depends_on:
       postgres:
         condition: service_healthy
     ports:
-      - "3000:3000"
+      - "3000:8080"
     environment:
-      - NODE_ENV=production
-      - PORT=3000
+      - PORT=8080
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - DATABASE_URL=postgres://${POSTGRES_USER:-sentinel}:${POSTGRES_PASSWORD:-sentinel}@postgres:5432/${POSTGRES_DB:-sentinel_cve}
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -204,17 +200,18 @@ docker run -d --name sentinel-cve-db -p 5432:5432 \
   -e POSTGRES_USER=sentinel -e POSTGRES_PASSWORD=sentinel -e POSTGRES_DB=sentinel_cve \
   postgres:16-alpine
 
-# 安裝套件
+# 前端：安裝套件並啟動 Vite dev server（熱重載，預設 5173）
 npm install
-
-# 設定 .env（至少要有 DATABASE_URL 指向上面的 PostgreSQL）
-cp .env.example .env
-
-# 啟動開發伺服器 (包含前端 Vite 與後端 TSX API)
 npm run dev
+
+# 後端：另開一個終端機，設定環境變數並啟動 Spring Boot（需 Java 21 + Maven）
+cd java-backend
+export DATABASE_URL="postgres://sentinel:sentinel@localhost:5432/sentinel_cve"
+export GEMINI_API_KEY="your_gemini_api_key_here"
+mvn spring-boot:run
 ```
 
-瀏覽器開啟 `http://localhost:3000` 即可訪問。伺服器啟動時會自動建立所需的資料表 (`CREATE TABLE IF NOT EXISTS`)，無需另外執行 migration。
+後端啟動於 `http://localhost:8080`，會自動建立所需的資料表 (`CREATE TABLE IF NOT EXISTS`)，無需另外執行 migration。開發模式下前端 Vite dev server 與後端 API 為分離埠號，請自行設定 Vite proxy 或直接呼叫 `http://localhost:8080/api/*`。
 
 ---
 
@@ -247,16 +244,16 @@ docker run -d --name sentinel-cve-db --network sentinel-net \
   -v sentinel-cve-pgdata:/var/lib/postgresql/data \
   postgres:16-alpine
 
-# 建置 Docker 映像檔
-docker build -t sentinel-cve:latest .
+# 建置 Docker 映像檔（使用 java-backend/Dockerfile）
+docker build -f java-backend/Dockerfile -t sentinel-cve:latest .
 
 # 執行容器 (帶入 GEMINI_API_KEY 與 DATABASE_URL)
 docker run -d \
   --name sentinel-cve-app \
   --network sentinel-net \
-  -p 3000:3000 \
+  -p 3000:8080 \
   -e GEMINI_API_KEY="your_api_key_here" \
-  -e NODE_ENV=production \
+  -e PORT=8080 \
   -e DATABASE_URL="postgres://sentinel:sentinel@sentinel-cve-db:5432/sentinel_cve" \
   --restart always \
   sentinel-cve:latest
