@@ -38,7 +38,7 @@
     <dependency>
       <groupId>org.postgresql</groupId>
       <artifactId>postgresql</artifactId>
-      <scope>runtime</scope>
+      <!-- Not runtime-only: PersistenceRepository references org.postgresql.util.PGobject directly. -->
     </dependency>
     <dependency>
       <groupId>org.projectlombok</groupId>

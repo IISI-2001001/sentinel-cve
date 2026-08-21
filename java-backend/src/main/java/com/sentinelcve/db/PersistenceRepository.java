@@ -134,23 +134,24 @@ public class PersistenceRepository {
 
     public void persistState(AppState state) {
         transactionTemplate.executeWithoutResult(status -> {
-            replaceCollection("products", state.products, new String[]{"name", "criticality"},
-                p -> new Object[]{p.getName(), p.getCriticality()});
-            replaceCollection("cves", state.cvesDatabase, new String[]{"product_name", "severity", "cvss_score", "cisa_kev"},
+            replaceCollection("products", state.products, new String[]{"id", "name", "criticality"},
+                p -> new Object[]{p.getId(), p.getName(), p.getCriticality()});
+            replaceCollection("cves", state.cvesDatabase, new String[]{"id", "product_name", "severity", "cvss_score", "cisa_kev"},
                 c -> new Object[]{
+                    c.getId(),
                     c.getProductName(),
                     c.getCvss() != null ? c.getCvss().getSeverity() : null,
                     c.getCvss() != null ? c.getCvss().getBaseScore() : null,
                     c.isCisaKev(),
                 });
-            replaceCollection("rules", state.rules, new String[]{}, r -> new Object[]{});
-            replaceCollection("notifications", state.notifications, new String[]{"cve_id", "status"},
-                n -> new Object[]{n.getCveId(), n.getStatus()});
-            replaceCollection("webhooks", state.webhooks, new String[]{}, w -> new Object[]{});
-            replaceCollection("logs", state.logs, new String[]{"type", "level"},
-                l -> new Object[]{l.getType(), l.getLevel()});
-            replaceCollection("projects", state.projects, new String[]{"code"}, p -> new Object[]{p.getCode()});
-            replaceCollection("tickets", state.tickets, new String[]{"status"}, t -> new Object[]{t.getStatus()});
+            replaceCollection("rules", state.rules, new String[]{"id"}, r -> new Object[]{r.getId()});
+            replaceCollection("notifications", state.notifications, new String[]{"id", "cve_id", "status"},
+                n -> new Object[]{n.getId(), n.getCveId(), n.getStatus()});
+            replaceCollection("webhooks", state.webhooks, new String[]{"id"}, w -> new Object[]{w.getId()});
+            replaceCollection("logs", state.logs, new String[]{"id", "type", "level"},
+                l -> new Object[]{l.getId(), l.getType(), l.getLevel()});
+            replaceCollection("projects", state.projects, new String[]{"id", "code"}, p -> new Object[]{p.getId(), p.getCode()});
+            replaceCollection("tickets", state.tickets, new String[]{"id", "status"}, t -> new Object[]{t.getId(), t.getStatus()});
 
             jdbc.update("DELETE FROM app_config");
             jdbc.update("INSERT INTO app_config (key, value) VALUES (?, ?)", "emailConfig", json(state.emailConfig));
