@@ -4,7 +4,7 @@
 
 ## 1. 系統概觀
 
-SentinelCVE 是 React/Vite 單頁應用程式與 Express API 的同容器系統，主要流程為：
+SentinelCVE 是 React/Vite 單頁應用程式與 Java 21 / Spring Boot 3 後端的一體化系統，主要流程為：
 
 1. 建立監控產品與專案，記錄當前版本、CPE/套件識別資訊與專案綁定。
 2. 由供應商官網、GitHub Releases、npm、PyPI 等來源取得最新版本。
@@ -19,28 +19,30 @@ SentinelCVE 是 React/Vite 單頁應用程式與 Express API 的同容器系統�
 Browser / React
     │  REST JSON（前端每 10 秒同步）
     ▼
-Express server.ts
-    ├─ Product catalog / version providers
-    ├─ NVD / OSV vulnerability providers
-    ├─ AI providers
-    ├─ Project scheduler / Teams MessageCard
-    ├─ Ticket lifecycle
-    └─ data/state.json（原子替換持久化）
+Spring Boot app（`java-backend/` / `sentinel-cve-server.jar`）
+    │
+    ├─ `controller/*` REST Controllers
+    │      ▼
+    ├─ `service/*` 業務邏輯
+    │      ├─ `ScanService` / `AiService` / `TicketService`
+    │      ├─ `SchedulerService`（30 秒 tick）
+    │      └─ `StateService`（管理 `AppState`）
+    │              ▼
+    ├─ `db/PersistenceRepository`
+    │      ▼
+    └─ PostgreSQL（每集合一張表，`data JSONB`；啟動時載入 `AppState`，異動後非同步寫回）
 ```
 
-生產模式中 Express 同時提供 `/api/*` 與 `dist/` 靜態前端。開發模式則由 Express 掛載 Vite middleware。
+生產模式中 Spring Boot 內建 Tomcat 同時提供 `/api/*` 與打包進 Jar 的前端靜態資源。開發模式通常以前端 Vite dev server（5173）與後端 Spring Boot（8080）分離埠號運作；後端啟動時會由 `SentinelCveApplication` 的 `CommandLineRunner` 呼叫 `stateService.initAndLoad()`，先完成 PostgreSQL 初始化與狀態載入。
 
 ## 3. 檔案與程式用途
 
 | 檔案 | 用途 |
 |---|---|
-| `server.ts` | Express 入口、REST API、資料持久化、AI 轉接、警報規則、版本/CVE 排程、Teams 發送、工單 CRUD。 |
 | `src/main.tsx` | React DOM 啟動點，將 `App` 掛載至 HTML root。 |
 | `src/App.tsx` | 前端最上層狀態、頁面導覽、API 資料整合；每 10 秒重載產品、專案、CVE、警報與日誌。 |
 | `src/types.ts` | 前後端共用 TypeScript 型別，包含 CVE、產品、專案、通知、AI、工單與排程。 |
-| `src/data/initialData.ts` | 無 `state.json` 時的範例/初始資料。一旦持久化檔存在，以持久化內容為準。 |
-| `src/server/productCatalog.ts` | 內建產品目錄、別名、供應商、類別、CPE 範本、版本來源與 catalog enrichment。 |
-| `src/server/productProviders.ts` | 官方版本與 CVE Provider；負責 HTTP timeout、版本解析、穩定版篩選、NVD/OSV 映射。 |
+| `src/data/initialData.ts` | 前端示範/初始資料常數；供 UI 與型別開發參考，非正式後端持久化來源。 |
 | `src/components/Navbar.tsx` | 頂部導覽、掃描快捷鍵、未讀警報與 CVE 開啟。 |
 | `src/components/Dashboard.tsx` | 總覽 KPI、弱點分佈、重點產品狀態、最新 CVE/Alert feed。 |
 | `src/components/ProjectManager.tsx` | 專案 CRUD、產品綁定、版本矩陣、CVE 清單、獨立通知頻率、Teams Webhook、手動通知、工單生命週期與結案區。 |
@@ -54,23 +56,38 @@ Express server.ts
 | `vite.config.ts` | React/Tailwind Vite plugin、開發建置設定。 |
 | `tsconfig.json` | TypeScript 編譯與型別檢查設定。 |
 | `index.html` | SPA HTML shell。 |
-| `Dockerfile` | Node 20 Alpine 多階段建置；執行階段使用非 root `node` 帳號。 |
-| `docker-compose.yml` | 建置容器、映射 3000 port、掛載 `./data:/app/data`、設定 healthcheck。 |
+| `java-backend/pom.xml` | Maven 專案定義；管理 Spring Boot、JDBC、Mail、PostgreSQL 等相依。 |
+| `java-backend/Dockerfile` | 三階段建置：`node:20-alpine` 建前端、`maven:3.9-eclipse-temurin-21` 打包 Jar、`eclipse-temurin:21-jre-alpine` 作為執行階段。 |
+| `java-backend/src/main/resources/application.yml` | Spring Boot 組態，目前含 `server.port` 與 logging level。 |
+| `java-backend/src/main/resources/demo-data.json` | `SEED_DEMO_DATA=true` 且資料庫為空時使用的示範資料集。 |
+| `java-backend/src/main/java/com/sentinelcve/SentinelCveApplication.java` | Spring Boot 啟動入口；啟用 `@EnableAsync` / `@EnableScheduling`，並以 `CommandLineRunner` 呼叫 `stateService.initAndLoad()`。 |
+| `java-backend/src/main/java/com/sentinelcve/controller/*.java` | 16 支 REST Controller：Product、Cve、Project、Ticket、Rule、Webhook、Alert、Log、Report、AiConfig、EmailConfig、ScheduleConfig、TeamsConfig、ProductCatalog、Health、SpaFallback。 |
+| `java-backend/src/main/java/com/sentinelcve/service/*.java` | 核心業務邏輯：`ScanService`、`AiService`、`MailService`、`WebhookDispatchService`、`AlertRuleEngineService`、`SchedulerService`、`TicketService`、`ProjectDigestService`、`StateService`、`LogService`。 |
+| `java-backend/src/main/java/com/sentinelcve/model/*.java` | 21 個 Java POJO，對應前端 `src/types.ts`，由 Jackson 以 camelCase 序列化/反序列化。 |
+| `java-backend/src/main/java/com/sentinelcve/state/AppState.java` | 記憶體中的全域應用狀態；啟動時由 PostgreSQL 載入，各 service 在鎖保護下讀寫。 |
+| `java-backend/src/main/java/com/sentinelcve/db/PersistenceRepository.java` | PostgreSQL 持久化層；每個集合對應一張表，完整物件寫入 `data JSONB`，並抽出查詢索引欄位。 |
+| `java-backend/src/main/java/com/sentinelcve/config/DataSourceConfig.java` | 依 `DATABASE_URL` 或 PG* 環境變數建立 HikariCP `DataSource`。 |
+| `java-backend/src/main/java/com/sentinelcve/catalog/ProductCatalog.java` | 內建產品目錄、別名、供應商、類別、CPE 範本與 catalog enrichment；由舊 `productCatalog.ts` 移植。 |
+| `java-backend/src/main/java/com/sentinelcve/provider/ProductProviderService.java` | 官方版本與 CVE 相關 provider；負責 HTTP timeout、版本解析、穩定版篩選、NVD/OSV 映射；由舊 `productProviders.ts` 移植。 |
+| `docker-compose.yml` | 啟動 PostgreSQL 與 Spring Boot 應用；由 `java-backend/Dockerfile` 建置，對外映射 `3000:8080`，並設定 DB/app healthcheck。 |
 | `.dockerignore` | 排除 dependencies、dist、Git、`.env` 與本機器雜項。 |
-| `package.json` | scripts 與 npm dependencies。`lint` 實際執行 `tsc --noEmit`。 |
+| `package.json` | 前端專用 scripts 與 npm dependencies；`dev` 為 `vite`、`build` 為 `vite build`、`lint` 為 `tsc --noEmit`。 |
 | `README.md` | 專案基礎啟動說明；實作細節以本文件為準。 |
 | `metadata.json` | 專案/應用程式後設資訊。 |
-| `package-lock.json` / `bun.lock` | npm/Bun dependency lock；Docker 與目前 scripts 使用 npm lock。 |
+| `package-lock.json` / `bun.lock` | `package-lock.json` 為目前前端建置使用的 npm lock；`bun.lock` 仍在 repo 中，但目前部署與建置流程未使用。 |
 
 ## 4. 持久化與狀態
 
-`server.ts` 啟動時先從 `DATA_DIR/state.json` 載入狀態，預設 `DATA_DIR=<cwd>/data`。Docker Compose 中為 `/app/data`。
+Spring Boot 啟動時，`SentinelCveApplication` 會透過 `StateService.initAndLoad()` 先呼叫 `PersistenceRepository.initDb()` 建表，再把 PostgreSQL 中的所有集合載入記憶體 `AppState`。
 
-- `persistState()` 先寫入 `state.json.tmp`，再以 rename 替換 `state.json`，避免寫入中斷留下半成品。
-- 檔案 mode 為 `0600`。
-- Docker bind mount 的主機 `data` 目錄必須允許容器 `node` 使用者（通常 UID/GID 1000）寫入。
-- 持久化內容包含產品、CVE、專案、工單、通知簽章、排程時間、AI 設定與日誌。
-- Webhook URL 與 API key 屬敏感資料；不應提交 `data/state.json` 或 `.env`。
+- 持久化已改為 **100% PostgreSQL**，不再使用 `data/state.json`、`DATA_DIR`、檔案 mode `0600` 或 Docker bind mount `./data`。
+- `StateService` 在啟動時會把 `products`、`cves`、`rules`、`notifications`、`webhooks`、`logs`、`projects`、`tickets` 與 `app_config`（AI / Email / Teams / Schedule 設定）整批載入 `AppState`。
+- 每次異動後由 `StateService.persist()` 以 `@Async` 非同步寫回 PostgreSQL；`PersistenceRepository.persistState()` 會在 transaction 中對每個集合執行 `replaceCollection(...)`，先清空再依 `position` 重建，保留原本陣列順序。
+- 各集合各自對應資料表：`products`、`cves`、`rules`、`notifications`、`webhooks`、`logs`、`projects`、`tickets`，以及設定表 `app_config`。
+- 主鍵以 `id` 為主；`cves` 例外使用 `(id, product_name)` 複合主鍵。完整物件會序列化到 `data JSONB` 欄位，並抽出 `severity`、`cvss_score`、`cisa_kev`、`status`、`code`、`type`、`level` 等欄位供 SQL 查詢與索引。
+- 連線由 `DATABASE_URL`（或 `PGHOST` / `PGPORT` / `PGUSER` / `PGPASSWORD` / `PGDATABASE`）控制；格式請以 `README.md` 為準。
+- 若資料庫為空且設定 `SEED_DEMO_DATA=true`，啟動時會將 classpath 中的 `demo-data.json` 種入 PostgreSQL。
+- Webhook URL 與 API key 屬敏感資料；不應提交 `.env`，資料庫憑證也不應硬編碼進 image 或 Git。
 
 ## 5. 產品目錄與識別
 
@@ -137,7 +154,7 @@ NVD 轉換優先順序為 CVSS 3.1、3.0、2.0。severity 正規化為 `CRITICAL
 
 ### 7.1 全域排程
 
-`setInterval(..., 30000)` 每 30 秒檢查是否到期。為避免長時間產品掃描延誤通知，專案版本/CVE 時鐘優先檢查，後續才執行全域與單產品掃描。
+`SchedulerService.tick()` 透過 `@Scheduled(fixedDelay = 30000, initialDelay = 30000)` 每 30 秒檢查是否到期。為避免長時間產品掃描延誤通知，專案版本/CVE 時鐘優先檢查，後續才執行全域與單產品掃描。
 
 全域 scheduler 負責：
 
@@ -223,12 +240,11 @@ Rule 必須啟用，且需符合：
 
 ## 10. AI 模組
 
-`generateAiText()` 支援：
+`AiService.generateAiText()` 支援：
 
-- Google Gemini SDK。
+- Google Gemini REST API。
 - OpenAI API、Ollama 與自訂 OpenAI-compatible endpoint。
 - Anthropic Claude Messages API。
-- Amazon Bedrock（依專案目前設定/實作能力）。
 
 AI 用於 CVE 影響摘要、根因、攻擊情境、減緩、修補步驟、複測方法與綜合工單草案。AI 輸出不是官方公告，不應未複核就在生產環境執行指令。
 
@@ -261,10 +277,14 @@ npm ci
 npm run dev
 npm run lint
 npm run build
+cd java-backend
+mvn test
+mvn -q -DskipTests package
 ```
 
 - `npm run lint` 是 TypeScript `--noEmit` 檢查。
-- `npm run build` 先建置 Vite 前端，再用 esbuild 產生 `dist/server.cjs`。
+- `npm run build` 僅建置 Vite 前端靜態檔案。
+- `mvn test` 執行 Spring Boot 後端測試；`mvn -q -DskipTests package` 會產出 `target/sentinel-cve-server.jar`。
 - 健康檢查：`GET http://localhost:3000/api/health`。
 - 修改排程時必須測試：首次發送、無變化去重、Webhook 失敗重試、手動強制發送、CLOSED 排除、last/next run 更新。
 - 修改 Provider 時必須測試穩定版篩選、rate limit、timeout、網頁格式變更與無結果情境。
@@ -280,29 +300,30 @@ docker inspect --format '{{.State.Health.Status}}' sentinel-cve-app
 
 | 變數 | 用途 |
 |---|---|
-| `NODE_ENV` | `production` 時提供 dist 靜態檔。 |
-| `PORT` | Express port，預設 3000。 |
-| `DATA_DIR` | 持久化目錄。 |
+| `PORT` | Spring Boot / Embedded Tomcat 埠號；容器內預設 8080，Compose 對外映射為 3000。 |
 | `APP_URL` | 應用對外 URL，用於需要連結的訊息。 |
+| `DATABASE_URL` | PostgreSQL 連線字串；後端所有狀態資料皆持久化於此。 |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `docker-compose.yml` 啟動 PostgreSQL 時使用，並用來組裝預設 `DATABASE_URL`。 |
+| `SEED_DEMO_DATA` | `true` 時，首次連到空資料庫會匯入示範資料。 |
 | `GEMINI_API_KEY` | Gemini API key；不可寫進 image 或 Git。 |
 
 EC2/VM 部署時，除了容器 healthy，還要檢查 Security Group/firewall 是否放行對外 port。建議只允許測試 IP，或放在 TLS reverse proxy 後方，不要將測試服務無限制開放。
 
 ## 14. 已知限制與改善方向
 
-1. **單機 JSON store**：`state.json` 適合地端/單實例測試，不適合多實例並行寫入。生產環境應改為 PostgreSQL 等資料庫。
+1. **目前為全量集合寫回 PostgreSQL**：每次異動會以 transaction 重寫整個集合，資料量成長後需評估增量更新、事件流或更細粒度 schema。
 2. **無身分驗證/RBAC**：目前 API 未有完整驗證與權限邊界，不應直接暴露於不受信任網路。
-3. **Webhook secret at rest**：目前存於 state JSON；生產化應使用 secrets manager/KMS 或加密欄位。
+3. **Webhook secret at rest**：目前仍保存在 PostgreSQL JSONB/設定資料中；生產化應使用 secrets manager/KMS 或加密欄位。
 4. **Provider 易受上游變更影響**：HTML parser 應加 contract test 與來源失效告警。
 5. **版本判斷簡化**：目前以最新安全版字串不等於當前版判定，未處理 LTS/major branch/backport 支援政策。
 6. **CVE 關聯規則不完全一致**：前端較寬鬆，後端 digest 較嚴格；應抽出共用 matching service 與測試資料。
-7. **排程為進程內 timer**：重啟後依 persisted next-run 繼續，但沒有 distributed lock。多 replica 會重複執行。
+7. **排程為進程內 scheduler**：重啟後依 persisted next-run 繼續，但沒有 distributed lock。多 replica 會重複執行。
 8. **MessageCard 容量**：目前限制顯示 30 項；大型專案應加入系統深連結、分頁或 Adaptive Card/Workflow 處理。
 9. **舊 API 尚未移除**：Email 與全域 Teams 相容端點仍在後端，後續應在有 migration plan 時正式下線。
 
 ## 15. 內建產品追蹤來源完整清單
 
-本節以 `productCatalog.ts` 與 `productProviders.ts` 的**目前實際程式執行順序**為準，而不是只看目錄中的 `sourceType`。`getLatestVersion()` 會先檢查 `EOL_PRODUCT_SLUGS`；命中的產品會優先使用 endoflife.date，即使目錄原本標為 vendor 或 GitHub。
+本節以 `catalog/ProductCatalog.java` 與 `provider/ProductProviderService.java` 的**目前實際程式執行順序**為準，而不是只看目錄中的 `sourceType`。`getLatestVersion()` 會先檢查 `EOL_PRODUCT_SLUGS`；命中的產品會優先使用 endoflife.date，即使目錄原本標為 vendor 或 GitHub。
 
 ### 15.1 版本與 CVE 來源總表
 
@@ -355,9 +376,9 @@ EC2/VM 部署時，除了容器 healthy，還要檢查 Security Group/firewall �
 
 ## 16. 新增產品 Adapter 清單
 
-1. 在 `productCatalog.ts` 新增名稱、aliases、vendor、category 與來源 metadata。
+1. 在 `catalog/ProductCatalog.java` 新增名稱、aliases、vendor、category 與來源 metadata。
 2. 優先使用結構化官方 API/registry；最後才使用 HTML parser。
-3. 在 `getLatestVersion()` 新增 adapter，排除預覽版並回傳 `sourceUrl`、`confidence`、`checkedAt`。
+3. 在 `provider/ProductProviderService.getLatestVersion()` 新增 adapter，排除預覽版並回傳 `sourceUrl`、`confidence`、`checkedAt`。
 4. 配置 CPE template 或 ecosystem/package identity。
 5. 測試當前版、最新版、失敗情境、rate limit 與通知 signature。
 6. 以 `/api/product-catalog/check-all-versions` 執行內建目錄批次稽核，不可只以 UI 顯示作為通過標準。
