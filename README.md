@@ -21,6 +21,7 @@
    - [使用 Docker CLI 手動建置與執行](#3-使用-docker-cli-手動建置與執行)
    - [完整容器重建與更新流程 (Rebuild Workflow)](#4-完整容器重建與更新流程-rebuild-workflow)
    - [日誌查看與健康檢查 (Logs & Health check)](#5-日誌查看與健康檢查-logs--health-check)
+6. [Vagrant VM 部署 (本機/測試用虛擬機)](#-vagrant-vm-部署-本機測試用虛擬機)
 
 ---
 
@@ -295,3 +296,42 @@ docker inspect --format='{{json .State.Health}}' sentinel-cve-app
 curl -I http://localhost:3000/api/health
 ```
 若回傳 `HTTP/1.1 200 OK` 且包含 `{"status":"ok"}` 即代表服務正常運作！
+
+---
+
+## 🖥️ Vagrant VM 部署 (本機/測試用虛擬機)
+
+本專案根目錄提供 `Vagrantfile`，可在 VirtualBox 虛擬機（Rocky Linux 9）中自動安裝 Docker 並以 `docker compose` 啟動整套服務，適合本機測試或不想直接在主機安裝 Docker 的情境。
+
+### 啟動 VM 並開啟服務
+
+```bash
+cd cve_ai   # 專案根目錄（Vagrantfile 所在位置）
+vagrant up
+```
+
+* `vagrant up` 第一次執行時會自動完成：安裝 Docker、clone GitHub repo 到 VM 內的 `/home/vagrant/sentinel-cve`、複製 `.env.example` 為 `.env`，並執行 `docker compose up -d --build`。
+* 之後每次 `vagrant up`（VM 已存在、只是關機狀態）**不會重跑安裝流程**，但因為 `docker-compose.yml` 中所有服務都設定 `restart: always`，Docker daemon 開機後會自動把先前的容器重新啟動，通常不需要再手動下指令。
+* 開機完成（約 1–2 分鐘）後，直接開瀏覽器訪問 **http://localhost:3000** 即可（VM 已將 `3000`、`5432` 埠轉發到主機）。
+
+### 常用指令
+
+```bash
+vagrant status    # 確認 VM 目前狀態（running / poweroff）
+vagrant ssh       # 進入 VM 內部（可再用 docker ps / docker logs 等指令）
+vagrant halt      # 關閉 VM（下次要用時再 vagrant up）
+vagrant destroy   # 完全刪除 VM（下次 vagrant up 會重新跑一次完整 provision）
+```
+
+### 如果容器沒有自動啟動，或想強制拉取最新程式碼重建
+
+```bash
+vagrant ssh -c "cd /home/vagrant/sentinel-cve && git pull && docker compose up -d --build"
+```
+
+### 驗證服務是否正常
+
+```bash
+vagrant ssh -c "docker ps --filter name=sentinel-cve"
+curl -I http://localhost:3000/api/health
+```
