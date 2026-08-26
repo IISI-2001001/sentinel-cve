@@ -74,7 +74,7 @@ Spring Boot app（`java-backend/` / `sentinel-cve-server.jar`）
 | `package.json` | 前端專用 scripts 與 npm dependencies；`dev` 為 `vite`、`build` 為 `vite build`、`lint` 為 `tsc --noEmit`。 |
 | `README.md` | 專案基礎啟動說明；實作細節以本文件為準。 |
 | `metadata.json` | 專案/應用程式後設資訊。 |
-| `package-lock.json` / `bun.lock` | `package-lock.json` 為目前前端建置使用的 npm lock；`bun.lock` 仍在 repo 中，但目前部署與建置流程未使用。 |
+| `package-lock.json` | 前端建置使用的 npm lock。（`bun.lock` 因未被任何建置流程使用，已從 repo 移除） |
 
 ## 4. 持久化與狀態
 
