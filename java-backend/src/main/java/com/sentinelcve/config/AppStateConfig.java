@@ -1,6 +1,5 @@
 package com.sentinelcve.config;
 
-import com.sentinelcve.model.AiConfig;
 import com.sentinelcve.model.ScheduleConfig;
 import com.sentinelcve.model.TeamsNotificationConfig;
 import com.sentinelcve.state.AppState;
@@ -9,8 +8,7 @@ import org.springframework.context.annotation.Configuration;
 
 import java.time.Instant;
 
-/** Provides the singleton AppState bean, pre-populated with the same default config values
- * that server.ts assigns to scheduleConfig / teamsConfig / currentAiConfig at module load time. */
+/** Provides the singleton AppState bean, pre-populated with default config values. */
 @Configuration
 public class AppStateConfig {
 
@@ -23,7 +21,6 @@ public class AppStateConfig {
         schedule.setIntervalMinutes(30);
         schedule.setCronExpression("*/30 * * * *");
         schedule.setScanScope("ALL");
-        schedule.setAutoAiAnalysis(true);
         schedule.setAutoNotifyTeams(true);
         schedule.setAutoNotifyEmail(true);
         schedule.setLastRunAt(Instant.now().toString());
@@ -36,15 +33,6 @@ public class AppStateConfig {
         teams.setMinCvssScore(7.0);
         teams.setNotifyCisaKevOnly(false);
         teams.setBotDisplayName("SentinelCVE Bot");
-
-        AiConfig ai = state.currentAiConfig;
-        ai.setProvider("gemini");
-        ai.setModel("gemini-3.6-flash");
-        ai.setApiKey("");
-        ai.setBaseUrl("");
-        ai.setTemperature(0.2);
-        ai.setPromptPreset("ciso");
-        ai.setCustomSystemPrompt("");
 
         return state;
     }

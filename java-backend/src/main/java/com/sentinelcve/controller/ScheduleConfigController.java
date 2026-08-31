@@ -22,9 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Java port of server.ts lines 1285-1345.
- */
+/** Java port of the schedule config endpoints. */
 @RestController
 @RequestMapping("/api/schedule")
 public class ScheduleConfigController {
@@ -60,7 +58,6 @@ public class ScheduleConfigController {
             if (request.containsKey("intervalMinutes")) state.scheduleConfig.setIntervalMinutes((int) toNumber(request.get("intervalMinutes")));
             if (hasText(request.get("cronExpression"))) state.scheduleConfig.setCronExpression(asString(request.get("cronExpression")));
             if (hasText(request.get("scanScope"))) state.scheduleConfig.setScanScope(asString(request.get("scanScope")));
-            if (request.containsKey("autoAiAnalysis")) state.scheduleConfig.setAutoAiAnalysis(jsBoolean(request.get("autoAiAnalysis")));
             if (request.containsKey("autoNotifyTeams")) state.scheduleConfig.setAutoNotifyTeams(jsBoolean(request.get("autoNotifyTeams")));
             if (request.containsKey("autoNotifyEmail")) state.scheduleConfig.setAutoNotifyEmail(jsBoolean(request.get("autoNotifyEmail")));
             state.scheduleConfig.setNextRunAt(Instant.ofEpochMilli(System.currentTimeMillis() + state.scheduleConfig.getIntervalMinutes() * 60_000L).toString());
@@ -85,9 +82,7 @@ public class ScheduleConfigController {
             state.scheduleConfig.setNextRunAt(Instant.ofEpochMilli(now.toEpochMilli() + state.scheduleConfig.getIntervalMinutes() * 60_000L).toString());
             lastRunAt = state.scheduleConfig.getLastRunAt();
             nextRunAt = state.scheduleConfig.getNextRunAt();
-            targetProds = "CRITICAL_HIGH_ONLY".equals(state.scheduleConfig.getScanScope())
-                ? state.products.stream().filter(p -> "CRITICAL".equals(p.getCriticality()) || "HIGH".equals(p.getCriticality())).toList()
-                : List.copyOf(state.products);
+            targetProds = List.copyOf(state.products);
         }
 
         int scannedCount = 0;

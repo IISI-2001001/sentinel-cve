@@ -9,7 +9,7 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 public class CveItem {
-    private String id; // e.g. CVE-2024-3094
+    private String id;
     private String title;
     private String description;
     private String publishedDate;
@@ -24,7 +24,6 @@ public class CveItem {
     private List<String> cpe;
     private List<ReferenceLink> references;
     private List<DataSourceInfo> dataSources;
-    private String matchConfidence; // HIGH | MEDIUM | LOW
+    private String matchConfidence;
     private String matchedBy;
-    private AiAnalysis aiAnalysis;
 }

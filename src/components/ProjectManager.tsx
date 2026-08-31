@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
   FolderKanban,
   Plus,
@@ -20,9 +20,7 @@ import {
   ChevronRight,
   Server,
   Lock,
-  Sparkles,
   FileText,
-  Bot,
   RefreshCw,
   Filter,
   Bell,
@@ -92,7 +90,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   // Ticket States
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
-  const [generatingTicketPrjId, setGeneratingTicketPrjId] = useState<string | null>(null);
   const [ticketFilterStatus, setTicketFilterStatus] = useState<string>('ALL');
   const [manualNotifyKind, setManualNotifyKind] = useState<'VERSION' | 'CVE' | null>(null);
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
@@ -233,33 +230,25 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
         executiveSummary = `專案【${activeProjectDetail.name}】資產 [${cve.productName}] 存在安全性漏洞 [${cve.id}] (CVSS ${cve.cvss?.baseScore || 0})，需指派專人執行安全處置。`;
         rootCauseAnalysis = cve.description || `受影響元件 ${cve.productName} 存在已知 CVE 弱點，可能遭受攻擊者未授權利用。`;
 
-        if (cve.aiAnalysis?.mitigationSteps && cve.aiAnalysis.mitigationSteps.length > 0) {
-          actionSteps = cve.aiAnalysis.mitigationSteps.map((step, idx) => ({
-            stepNumber: idx + 1,
-            title: `修補步驟 ${idx + 1}`,
-            detail: step,
-          }));
-        } else {
-          actionSteps = [
-            {
-              stepNumber: 1,
-              title: '受影響套件版本清查與隔離',
-              detail: `確認專案中 ${cve.productName} 之部署範圍與漏洞影響層面。`,
-            },
-            {
-              stepNumber: 2,
-              title: '套用官方修補檔或升級版本',
-              detail: `依官方資安通報將 ${cve.productName} 更新至免受 ${cve.id} 影響之安全版本。`,
-            },
-            {
-              stepNumber: 3,
-              title: '執行資安複測與防衛驗證',
-              detail: '重新掃描該資產並檢查系統 Log 異常紀錄。',
-            },
-          ];
-        }
+        actionSteps = [
+          {
+            stepNumber: 1,
+            title: '受影響套件版本清查與隔離',
+            detail: `確認專案中 ${cve.productName} 之部署範圍與漏洞影響層面。`,
+          },
+          {
+            stepNumber: 2,
+            title: '套用官方修補檔或升級版本',
+            detail: `依官方資安通報將 ${cve.productName} 更新至免受 ${cve.id} 影響之安全版本。`,
+          },
+          {
+            stepNumber: 3,
+            title: '執行資安複測與防衛驗證',
+            detail: '重新掃描該資產並檢查系統 Log 異常紀錄。',
+          },
+        ];
 
-        mitigationPlan = cve.aiAnalysis?.workaround || `套用 ${cve.id} 官方安全修補檔，並於 WAF/網關層設定防禦規則。`;
+        mitigationPlan = `套用 ${cve.id} 官方安全修補檔，並於 WAF/網關層設定防禦規則。`;
         verificationMethod = '執行 SentinelCVE CVE 自動掃描複測與 Log 檢核。';
       }
 
@@ -334,26 +323,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     }
   }, [projects]);
 
-  const handleGenerateProjectTicket = async (prj: Project) => {
-    setGeneratingTicketPrjId(prj.id);
-    try {
-      const res = await fetch(`/api/projects/${prj.id}/generate-ticket`, {
-        method: 'POST',
-      });
-      const data = await res.json();
-      if (res.ok && data.id) {
-        setTickets((prev) => [data, ...prev.filter((t) => t.id !== data.id)]);
-        setSelectedTicket(data); // Open modal immediately
-      } else {
-        alert(`工單產出失敗: ${data.error || '無法連線至 AI 引擎'}`);
-      }
-    } catch (err) {
-      console.error('Failed to generate ticket:', err);
-      alert('產出專案工單時發生網路錯誤');
-    } finally {
-      setGeneratingTicketPrjId(null);
-    }
-  };
 
   const handleUpdateTicketStatus = async (
     ticketId: string,
@@ -535,10 +504,10 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
 
   const openCreateModal = () => {
     setEditingProject(null);
-    setFormCode(`PRJ-${Math.floor(100 + Math.random() * 900)}`);
+    setFormCode('');
     setFormName('');
     setFormDescription('');
-    setFormDepartment('數位金融事業群');
+    setFormDepartment('');
     setFormOwnerName('');
     setFormOwnerEmail('');
     setFormSecondary('');
@@ -1845,21 +1814,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                         <p className="text-xs text-slate-700 leading-relaxed">{cve.description}</p>
                       </div>
 
-                      {/* AI mitigation steps */}
-                      {cve.aiAnalysis?.mitigationSteps && cve.aiAnalysis.mitigationSteps.length > 0 && (
-                        <div className="bg-white p-3 rounded-xl border border-slate-200 text-xs space-y-1">
-                          <span className="font-bold text-slate-800 flex items-center space-x-1 text-[11px]">
-                            <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                            <span>AI 建議修補與減緩措施:</span>
-                          </span>
-                          <ul className="list-disc list-inside text-slate-600 text-[11px] space-y-0.5">
-                            {cve.aiAnalysis.mitigationSteps.slice(0, 3).map((step, idx) => (
-                              <li key={idx}>{step}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
                       {/* Ignore / Assign Action Bar */}
                       <div className="flex items-center justify-between pt-2 border-t border-slate-200/80">
                         <div className="flex items-center space-x-2">
@@ -1875,7 +1829,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                             </button>
                           ) : (
                             <span className="text-[11px] text-slate-400 font-medium">
-                              可指派成員生成修補工單，自動帶入 AI 處置建議
+                              可指派成員建立修補工單並追蹤處置進度
                             </span>
                           )}
                         </div>
@@ -1948,16 +1902,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => handleGenerateProjectTicket(prj)}
-                  disabled={generatingTicketPrjId === prj.id}
-                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center space-x-1.5 shadow-sm transition-all disabled:opacity-50"
-                  title="由 AI 分析本專案威脅與產品資產，自動生成完整處置工單"
-                >
-                  <Sparkles className={`w-3.5 h-3.5 ${generatingTicketPrjId === prj.id ? 'animate-spin' : ''}`} />
-                  <span>{generatingTicketPrjId === prj.id ? 'AI 分析產出中...' : '⚡ AI 產出專案修補工單'}</span>
-                </button>
-
                 {/* Status Filter */}
                 <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl text-xs">
                   <button
@@ -2020,14 +1964,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
                 <p className="text-xs font-semibold text-slate-700">目前此專案尚無安全處置工單</p>
                 <p className="text-[11px] text-slate-400">點擊下方按鈕或至【產品版本與升級對照】/【專案資產弱點列表】進行指派派單</p>
-                <button
-                  onClick={() => handleGenerateProjectTicket(prj)}
-                  disabled={generatingTicketPrjId === prj.id}
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs inline-flex items-center space-x-1.5 shadow-sm transition-all disabled:opacity-50"
-                >
-                  <Sparkles className={`w-3.5 h-3.5 ${generatingTicketPrjId === prj.id ? 'animate-spin' : ''}`} />
-                  <span>{generatingTicketPrjId === prj.id ? 'AI 產出中...' : '一鍵由 AI 產出全專案綜合修補工單'}</span>
-                </button>
               </div>
             ) : (
               <div className="space-y-3">
@@ -2615,14 +2551,14 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   </div>
                 </div>
 
-                {/* AI Suggestions Info Box */}
+                {/* Standard ticket guidance info box */}
                 <div className="bg-indigo-50/80 border border-indigo-200 rounded-xl p-3.5 space-y-1.5">
                   <div className="flex items-center space-x-1.5 text-xs font-bold text-indigo-900">
-                    <Sparkles className="w-4 h-4 text-indigo-600" />
-                    <span>AI 自動注入修補處置建議與步驟</span>
+                    <CheckCircle2 className="w-4 h-4 text-indigo-600" />
+                    <span>建立工單時自動帶入標準修補資訊</span>
                   </div>
                   <p className="text-[11px] text-indigo-800 leading-relaxed">
-                    系統隨即將該修補項目寫入專案工單，並自動帶入 AI 生成之執行摘要、根因分析、修補處置步驟、緩和措施與資安掃描複測核驗方式。
+                    系統會將該修補項目寫入專案工單，並帶入執行摘要、根因分析、修補處置步驟、緩和措施與資安掃描複測核驗方式。
                   </p>
                 </div>
 
@@ -2641,7 +2577,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md transition-all flex items-center space-x-1.5 disabled:opacity-50"
                   >
                     <Send className={`w-3.5 h-3.5 ${isCreatingTicket ? 'animate-spin' : ''}`} />
-                    <span>{isCreatingTicket ? '寫入工單中...' : '確認派發工單 (含 AI 建議)'}</span>
+                    <span>{isCreatingTicket ? '寫入工單中...' : '確認派發工單'}</span>
                   </button>
                 </div>
               </form>
@@ -2656,7 +2592,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                 <h3 className="text-base font-extrabold text-slate-900 flex items-center space-x-2">
                   <FolderKanban className="w-5 h-5 text-blue-600" />
-                  <span>{editingProject ? '編輯專案邊界與通報設定' : '建立全新企業專案邊界'}</span>
+                  <span>{editingProject ? '編輯專案邊界與通報設定' : '建立全新專案'}</span>
                 </h3>
                 <button onClick={() => setIsCreating(false)} className="text-slate-400 hover:text-slate-600">
                   <X className="w-5 h-5" />
@@ -2674,18 +2610,17 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                       required
                       value={formCode}
                       onChange={(e) => setFormCode(e.target.value)}
-                      placeholder="例：PRJ-PAY"
                       className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-600"
                     />
                   </div>
 
                   <div>
-                    <label className="block font-bold text-slate-800 mb-1">隸屬事業群/部門</label>
+                    <label className="block font-bold text-slate-800 mb-1">所屬部門</label>
                     <input
                       type="text"
                       value={formDepartment}
                       onChange={(e) => setFormDepartment(e.target.value)}
-                      placeholder="例：數位金融事業群"
+                      placeholder=""
                       className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
                     />
                   </div>
@@ -2693,14 +2628,14 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
 
                 <div>
                   <label className="block font-bold text-slate-800 mb-1">
-                    專案完整名稱 <span className="text-rose-500">*</span>
+                    專案名稱 <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
                     required
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
-                    placeholder="例：行動支付 API 網關服務"
+                    placeholder=""
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
                   />
                 </div>
@@ -2718,15 +2653,14 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
 
                 {/* Responsible Owner Block */}
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-3">
-                  <span className="font-bold text-slate-800 block text-xs">專案成員與 Responsible Owner 設定</span>
                   <div className="grid grid-cols-1 gap-3">
                     <div>
-                      <label className="block font-semibold text-slate-700 mb-1">負責人姓名</label>
+                      <label className="block font-semibold text-slate-700 mb-1">專案經理</label>
                       <input
                         type="text"
                         value={formOwnerName}
                         onChange={(e) => setFormOwnerName(e.target.value)}
-                        placeholder="陳冠豪"
+                        placeholder=""
                         className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-blue-600"
                       />
                     </div>
@@ -2794,7 +2728,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
             <FolderKanban className="w-4 h-4" />
             <span>企業資安專案管理系統</span>
           </div>
-          <h1 className="text-xl font-extrabold text-slate-900">專案清單與安全邊界總覽</h1>
+          <h1 className="text-xl font-extrabold text-slate-900">專案清單總覽</h1>
           <p className="text-xs text-slate-500 mt-1">
             第一頁展示各專案名稱、負責人、套用產品、通知方式與通知頻率摘要。點選專案名稱即可進入詳細情報與設定。
           </p>
@@ -2806,7 +2740,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
             className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center space-x-1.5 transition-all shadow-sm"
           >
             <Plus className="w-4 h-4" />
-            <span>新增專案邊界</span>
+            <span>新增專案</span>
           </button>
         </div>
       </div>
@@ -2903,7 +2837,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
         <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-500 space-y-3">
           <FolderKanban className="w-10 h-10 text-slate-300 mx-auto" />
           <p className="text-sm font-semibold text-slate-700">未找到符合條件的專案</p>
-          <p className="text-xs text-slate-400">點擊【新增專案邊界】按鈕即可開始建立。</p>
+          <p className="text-xs text-slate-400">點擊【新增專案】按鈕即可開始建立。</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -3045,18 +2979,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   <span className="text-[11px] text-slate-400">建立時間: {new Date(prj.createdAt).toLocaleDateString()}</span>
 
                   <div className="flex items-center space-x-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleGenerateProjectTicket(prj);
-                      }}
-                      disabled={generatingTicketPrjId === prj.id}
-                      className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center space-x-1 transition-all border border-indigo-200 disabled:opacity-50"
-                      title="由 AI 自動分析生成此專案之修補處置工單"
-                    >
-                      <Sparkles className={`w-3.5 h-3.5 text-indigo-600 ${generatingTicketPrjId === prj.id ? 'animate-spin' : ''}`} />
-                      <span>{generatingTicketPrjId === prj.id ? '產出中...' : '一鍵派發 AI 工單'}</span>
-                    </button>
 
                     <button
                       onClick={() => {
@@ -3083,7 +3005,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h3 className="text-base font-extrabold text-slate-900 flex items-center space-x-2">
                 <FolderKanban className="w-5 h-5 text-blue-600" />
-                <span>{editingProject ? '編輯專案邊界與通報設定' : '建立全新企業專案邊界'}</span>
+                <span>{editingProject ? '編輯專案邊界與通報設定' : '建立全新專案'}</span>
               </h3>
               <button onClick={() => setIsCreating(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
@@ -3101,18 +3023,17 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     required
                     value={formCode}
                     onChange={(e) => setFormCode(e.target.value)}
-                    placeholder="例：PRJ-PAY"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-600"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-800 mb-1">隸屬事業群/部門</label>
+                  <label className="block font-bold text-slate-800 mb-1">所屬部門</label>
                   <input
                     type="text"
                     value={formDepartment}
                     onChange={(e) => setFormDepartment(e.target.value)}
-                    placeholder="例：數位金融事業群"
+                    placeholder=""
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
                   />
                 </div>
@@ -3120,14 +3041,14 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
 
               <div>
                 <label className="block font-bold text-slate-800 mb-1">
-                  專案完整名稱 <span className="text-rose-500">*</span>
+                  專案名稱 <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  placeholder="例：行動支付 API 網關服務"
+                  placeholder=""
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
                 />
               </div>
@@ -3145,15 +3066,14 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
 
               {/* Responsible Owner Block */}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-3">
-                <span className="font-bold text-slate-800 block text-xs">專案成員與 Responsible Owner 設定</span>
                 <div className="grid grid-cols-1 gap-3">
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">負責人姓名</label>
+                    <label className="block font-semibold text-slate-700 mb-1">專案經理</label>
                     <input
                       type="text"
                       value={formOwnerName}
                       onChange={(e) => setFormOwnerName(e.target.value)}
-                      placeholder="陳冠豪"
+                      placeholder=""
                       className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-blue-600"
                     />
                   </div>

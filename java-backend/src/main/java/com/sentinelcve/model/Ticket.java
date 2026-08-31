@@ -16,8 +16,8 @@ public class Ticket {
     private String projectName;
     private String department;
     private String title;
-    private String priority; // CRITICAL | HIGH | MEDIUM | LOW
-    private String status; // OPEN | IN_PROGRESS | RESOLVED | WAIVED | CLOSED
+    private String priority;
+    private String status;
     private String assigneeName;
     private String assigneeEmail;
     private List<String> affectedProducts;
@@ -25,7 +25,6 @@ public class Ticket {
     private List<TicketCveInfo> cveList;
     private int slaHours;
     private String slaDeadline;
-    private String aiModelUsed;
     private String executiveSummary;
     private String rootCauseAnalysis;
     private List<ActionStep> actionSteps;

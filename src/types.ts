@@ -32,15 +32,6 @@ export interface CVEItem {
   dataSources?: Array<{ type: string; url: string; retrievedAt: string }>;
   matchConfidence?: 'HIGH' | 'MEDIUM' | 'LOW';
   matchedBy?: string;
-  aiAnalysis?: {
-    summary: string;
-    impactLevel: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-    attackScenario: string;
-    mitigationSteps: string[];
-    workaround?: string;
-    executiveAdvisory: string;
-    analyzedAt: string;
-  };
 }
 
 export interface MonitoredProduct {
@@ -49,7 +40,6 @@ export interface MonitoredProduct {
   vendor: string; // e.g., "Linux"
   category: 'Operating System' | 'Web Server' | 'Database' | 'Framework/Library' | 'Container/Cloud' | 'Security/Network' | 'Application';
   cpeKeyword: string; // e.g., "linux:linux_kernel"
-  criticality: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'; // Importance to company
   autoScanEnabled: boolean;
   scanIntervalMinutes: number; // e.g. 5, 15, 60
   lastScannedAt?: string;
@@ -115,47 +105,14 @@ export interface WebhookConfig {
 export interface ScanLog {
   id: string;
   timestamp: string;
-  type: 'AUTO_SCAN' | 'MANUAL_SCAN' | 'ALERT_TRIGGER' | 'AI_ANALYSIS' | 'WEBHOOK_DISPATCH' | 'SYSTEM_INFO';
+  type: 'AUTO_SCAN' | 'MANUAL_SCAN' | 'ALERT_TRIGGER' | 'WEBHOOK_DISPATCH' | 'SYSTEM_INFO';
   level: 'INFO' | 'SUCCESS' | 'WARNING' | 'ERROR';
   productName?: string;
   message: string;
   details?: string;
 }
 
-export interface SecurityReport {
-  id: string;
-  generatedAt: string;
-  timeframe: string;
-  title: string;
-  executiveSummary: string;
-  topThreats: Array<{
-    cveId: string;
-    product: string;
-    cvss: number;
-    description: string;
-    status: string;
-  }>;
-  overallRiskScore: number; // 0 to 100
-  recommendedActions: string[];
-  affectedProductsCount: number;
-  totalCveAnalyzed: number;
-}
 
-export type AiProvider = 'gemini' | 'openai' | 'claude' | 'ollama' | 'custom' | 'aws-bedrock';
-
-export interface AiConfig {
-  provider: AiProvider;
-  model: string;
-  apiKey?: string;
-  baseUrl?: string;
-  awsRegion?: string;
-  awsAccessKeyId?: string;
-  awsSecretAccessKey?: string;
-  awsSessionToken?: string;
-  temperature: number; // 0.0 to 1.0
-  promptPreset: 'ciso' | 'redteam' | 'compliance' | 'custom';
-  customSystemPrompt?: string;
-}
 
 export type NotificationFrequency = 'REALTIME' | 'EVERY_15_MIN' | 'HOURLY' | 'DAILY' | 'WEEKLY';
 
@@ -247,8 +204,7 @@ export interface ScheduleConfig {
   enabled: boolean;
   intervalMinutes: number; // e.g. 15, 30, 60, 360, 1440
   cronExpression: string; // e.g. "0 */1 * * *"
-  scanScope: 'ALL' | 'CRITICAL_HIGH_ONLY';
-  autoAiAnalysis: boolean;
+  scanScope: 'ALL';
   autoNotifyTeams: boolean;
   autoNotifyEmail: boolean;
   lastRunAt?: string;
@@ -262,6 +218,12 @@ export interface TeamsNotificationConfig {
   minCvssScore: number;
   notifyCisaKevOnly: boolean;
   botDisplayName?: string;
+}
+
+export interface NvdApiConfig {
+  apiKey: string;
+  updatedAt?: string;
+  usingEnvFallback?: boolean;
 }
 
 export interface Ticket {
@@ -281,7 +243,6 @@ export interface Ticket {
   cveList: TicketCveInfo[];
   slaHours: number;
   slaDeadline: string;
-  aiModelUsed: string;
   executiveSummary: string;
   rootCauseAnalysis: string;
   actionSteps: ActionStep[];

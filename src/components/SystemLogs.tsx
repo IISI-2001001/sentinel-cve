@@ -41,7 +41,7 @@ export const SystemLogs: React.FC<SystemLogsProps> = ({ logs, onRefreshLogs }) =
       {/* Filter Tabs */}
       <div className="flex items-center space-x-2 overflow-x-auto no-scrollbar">
         <span className="text-xs text-slate-500 mr-2">類別篩選:</span>
-        {['ALL', 'AUTO_SCAN', 'ALERT_TRIGGER', 'AI_ANALYSIS', 'WEBHOOK_DISPATCH'].map((type) => (
+        {['ALL', 'AUTO_SCAN', 'ALERT_TRIGGER', 'WEBHOOK_DISPATCH'].map((type) => (
           <button
             key={type}
             onClick={() => setSelectedType(type)}
@@ -57,8 +57,6 @@ export const SystemLogs: React.FC<SystemLogsProps> = ({ logs, onRefreshLogs }) =
               ? '背景自動掃描'
               : type === 'ALERT_TRIGGER'
               ? '警報觸發'
-              : type === 'AI_ANALYSIS'
-              ? 'Gemini AI 分析'
               : 'Webhook 通報'}
           </button>
         ))}

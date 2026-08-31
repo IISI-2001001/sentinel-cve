@@ -1,6 +1,6 @@
 # SentinelCVE 漏洞監控與即時警報系統 (SentinelCVE Security Engine)
 
-企業級資安漏洞監控平台：自動同步全球權威 CVE/NVD/CISA KEV 漏洞資訊、透過 Gemini 與 Multi-LLM 智慧分析威脅等級與命令列修補建議，並提供 MS Teams Webhook、全域 Email (SMTP) 即時警報與自動化處置工單聯防。
+企業級資安漏洞監控平台：自動同步全球權威 CVE/NVD/CISA KEV 漏洞資訊、透過 NVD CPE 對照比對資產版本與已知弱點，並提供 MS Teams Webhook、全域 Email (SMTP) 即時警報與自動化處置工單聯防。
 
 ---
 
@@ -29,12 +29,12 @@
 
 * **四大多維度管控頁面**：
   * **總覽儀表板 (Dashboard)**：全站受監控資產、警報數量、CISA KEV 警告、CVSS 分數統計圖表與即時 Feed 檢視。
-  * **專案管理與工單中心 (Project Manager)**：專案團隊維護、產品版本與升級對照表 (Upgrade Matrix)、資安處置工單看板與 ⚡ AI 一鍵生成專案綜合處置工單。
-  * **系統管理與設定中心 (System Manager)**：集中管理「⏱️ 自動排程」、「📦 監控資產產品 (.txt/CPE 批次匯入)」、「✉️ 全域 Email SMTP」、「💬 MS Teams Webhook 通報」、「📋 系統稽核日誌」與「🤖 AI 工具與 LLM 選擇」。
+  * **專案管理與工單中心 (Project Manager)**：專案團隊維護、產品版本與升級對照表 (Upgrade Matrix)、資安處置工單看板。
+  * **系統管理與設定中心 (System Manager)**：集中管理「⏱️ 自動排程」、「📦 監控資產產品 (.txt/CPE 批次匯入)」、「📇 CPE 對照管理」、「🔑 NVD API Key 管理」、「✉️ 全域 Email SMTP」、「💬 MS Teams Webhook 通報」與「📋 系統稽核日誌」。
   * **系統說明與專業名詞手冊 (Documentation)**：完整收錄 CVE/CPE/CVSS 名詞解釋、NVD/CISA KEV/OSV/EPSS 權威數據源說明、4 種弱點查找與派單 SOP、自動化聯防管道與 FAQ。
-* **生成式 AI 資安推演引擎**：
-  * 支援 **Google Gemini**、OpenAI GPT-4o、Anthropic Claude 3.7 或地端 **Ollama**。
-  * 自動將原始英文 CVE 分析為繁體中文之「漏洞根因」、「攻擊衝擊」、「CLI Command-line Workaround 修補指令」與「掃描複測步驟」。
+* **NVD CPE 對照引擎**：
+  * 依產品名稱自動向 NVD CPE Dictionary 查詢並快取對應的 vendor:product CPE 識別碼（版本以萬用字元表示），供資產版本比對使用。
+  * 可設定 NVD API Key 以提升呼叫速率上限（無 Key 約 5 requests/30s，有 Key 約 50 requests/30s），未設定時以匿名方式呼叫。
 * **自動閉環聯防與告警**：
   * 支援排程定時自動比對資產、自動生成資安處置工單。
   * 即時發送具備 MessageCard 格式之 MS Teams Webhook 通知與企業 Email 派報。
@@ -63,10 +63,9 @@ SentinelCVE 採用 **Full-Stack (Java 21/Spring Boot 3 + React/Vite)** 一體化
                        ┌───────────▼──┐   ┌──────▼──────────────────────┐
                        │  PostgreSQL   │   │      External APIs          │
                        │ (Application  │   ├──────────────────────────────
-                       │  State Store) │   │ • NIST NVD API v2.0
+                       │  State Store) │   │ • NIST NVD API v2.0 / CPE Dictionary
                        └───────────────┘   │ • CISA KEV Feed
                                            │ • FIRST EPSS / OSV.dev
-                                           │ • Google Gemini API
                                            │ • MS Teams Webhook
                                            │ • Enterprise SMTP Server
                                            └──────────────────────────────
@@ -79,9 +78,10 @@ SentinelCVE 採用 **Full-Stack (Java 21/Spring Boot 3 + React/Vite)** 一體化
   * `App.tsx`：應用程式主要進入點，控管頂部導覽列狀態、數據載入與全局 Modal 狀態。
   * `Navbar.tsx`：頂部導覽列，提供 4 大頁面切換、即時全站掃描按鈕與未讀警報通知 Dropdown。
   * `Dashboard.tsx`：總覽儀表板，提供核心 KPI 數據、風險指數圓餅圖與最新監控 Feed。
-  * `ProjectManager.tsx`：專案管理、產品升級版本矩陣對照表、處置工單 Kanban 看板與 AI 綜合工單產出。
-  * `SystemManager.tsx`：系統整合管理大廳，收納排程設定、監控資產產品、SMTP 郵件伺服器、Teams Webhook、稽核日誌與 AI 引擎選擇。
-  * `ProductManager.tsx` (嵌入於 SystemManager)：資產產品清單維護、.txt CPE 檔案批次解析匯入、AI 升級檢測與個別資產弱點比對。
+  * `ProjectManager.tsx`：專案管理、產品升級版本矩陣對照表、處置工單 Kanban 看板。
+  * `SystemManager.tsx`：系統整合管理大廳，收納排程設定、監控資產產品、CPE 對照管理、NVD API Key 管理、SMTP 郵件伺服器、Teams Webhook 與稽核日誌。
+  * `CpeManager.tsx` (嵌入於 SystemManager)：管理 `product_cpe_cache` 資料表，可從 NVD 重新查詢/刷新、手動新增編輯或刪除各產品對應的 CPE 識別碼。
+  * `NvdApiKeyManager.tsx` (嵌入於 SystemManager)：設定並測試呼叫 NVD REST API 用的 API Key。
   * `SystemLogs.tsx` (嵌入於 SystemManager)：系統操作與排程稽核軌跡 Audit Log。
   * `Documentation.tsx`：完整系統文件與互動式專業名詞對照。
   * `CveDetailModal.tsx` / `TicketDetailModal.tsx`：CVE 漏洞威脅剖析與工單詳細內容與 Email 測試發送 Modal。
@@ -90,10 +90,10 @@ SentinelCVE 採用 **Full-Stack (Java 21/Spring Boot 3 + React/Vite)** 一體化
 
 * **核心技術**：Java 21, Spring Boot 3 (Web / JDBC / Async / Scheduling), Maven, **PostgreSQL 16 (`postgresql` JDBC driver + HikariCP)**。
 * **模組劃分 (`java-backend/src/main/java/com/sentinelcve/`)**：
-  * `controller/*`：53 支 REST API endpoints（`/api/dashboard/stats`, `/api/cves`, `/api/products`, `/api/projects`, `/api/tickets`, `/api/schedule/*`, `/api/system/*` 等），逐一對應原 Node/Express 路由。
-  * `service/*`：核心業務邏輯，包含 `ScanService`（NVD/OSV 檢索與版本比對）、`AiService`（Multi-LLM 抽象層）、`MailService`（動態 SMTP 寄信）、`WebhookDispatchService`（Teams/Slack/自訂 Webhook）、`AlertRuleEngineService`（告警規則引擎）、`SchedulerService`（`@Scheduled` 背景排程）、`TicketService`（AI 工單生成）、`ProjectDigestService`（專案摘要通知）。
-  * `db/PersistenceRepository.java` + `config/DataSourceConfig.java`：應用程式狀態（監控產品、CVE 資料庫、警報規則、通知、Webhook、稽核日誌、專案、工單、AI/Email/Teams/排程設定）全部以 PostgreSQL 儲存，每個集合對應一張資料表，主要欄位另外抽出做索引（如 `severity`、`cisa_kev`、`status`），完整物件則存於 `data JSONB` 欄位（透過 `PGobject` 序列化），服務啟動時整批載入記憶體、每次異動即以 `@Async` 方式整批寫回資料庫（Transaction 包裹，確保一致性）。
-  * `model/*`：與前端 `src/types.ts` 對應之 20 個 Java Model（Jackson camelCase 序列化）。
+  * `controller/*`：REST API endpoints（`/api/dashboard/stats`, `/api/cves`, `/api/products`, `/api/projects`, `/api/tickets`, `/api/schedule/*`, `/api/system/*`, `/api/cpe-cache/*`, `/api/nvd/*` 等）。
+  * `service/*`：核心業務邏輯，包含 `ScanService`（NVD/OSV 檢索與版本比對）、`ProductProviderService`（NVD CPE 查詢）、`MailService`（動態 SMTP 寄信）、`WebhookDispatchService`（Teams/Slack/自訂 Webhook）、`AlertRuleEngineService`（告警規則引擎）、`SchedulerService`（`@Scheduled` 背景排程）、`ProjectDigestService`（專案摘要通知）。
+  * `db/PersistenceRepository.java` + `config/DataSourceConfig.java`：應用程式狀態（監控產品、CVE 資料庫、警報規則、通知、Webhook、稽核日誌、專案、工單、CPE 快取、NVD/Email/Teams/排程設定）全部以 PostgreSQL 儲存，每個集合對應一張資料表，主要欄位另外抽出做索引（如 `severity`、`cisa_kev`、`status`），完整物件則存於 `data JSONB` 欄位（透過 `PGobject` 序列化），服務啟動時整批載入記憶體、每次異動即以 `@Async` 方式整批寫回資料庫（Transaction 包裹，確保一致性）。
+  * `model/*`：與前端 `src/types.ts` 對應之 Java Model（Jackson camelCase 序列化）。
 
 ### 資料流與背景排程 Worker
 
@@ -110,8 +110,8 @@ SentinelCVE 採用 **Full-Stack (Java 21/Spring Boot 3 + React/Vite)** 一體化
 請於專案根目錄參考 `.env.example` 建立 `.env` 檔案：
 
 ```env
-# Gemini API Key (用於生成式 AI 漏洞解析與處置工單推演)
-GEMINI_API_KEY="your_gemini_api_key_here"
+# NVD API Key (選填：用於提升呼叫 NIST NVD REST API 的速率上限，未設定則以匿名方式呼叫)
+NVD_API_KEY="your_nvd_api_key_here"
 
 # 服務執行埠號 (容器內部埠號，預設為 8080；對外仍以 3000 訪問)
 PORT=8080
@@ -175,7 +175,7 @@ services:
       - "3000:8080"
     environment:
       - PORT=8080
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - NVD_API_KEY=${NVD_API_KEY:-}
       - DATABASE_URL=postgres://${POSTGRES_USER:-sentinel}:${POSTGRES_PASSWORD:-sentinel}@postgres:5432/${POSTGRES_DB:-sentinel_cve}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/api/health"]
@@ -208,7 +208,7 @@ npm run dev
 # 後端：另開一個終端機，設定環境變數並啟動 Spring Boot（需 Java 21 + Maven）
 cd java-backend
 export DATABASE_URL="postgres://sentinel:sentinel@localhost:5432/sentinel_cve"
-export GEMINI_API_KEY="your_gemini_api_key_here"
+export NVD_API_KEY="your_nvd_api_key_here"   # 選填，未設定則以匿名方式呼叫 NVD API
 mvn spring-boot:run
 ```
 
@@ -223,7 +223,7 @@ mvn spring-boot:run
 ```bash
 # 1. 複製並設定環境變數
 cp .env.example .env
-# 請編輯 .env 填入正確的 GEMINI_API_KEY
+# 請編輯 .env 填入 NVD_API_KEY（選填，可提升 NVD API 呼叫速率上限）
 
 # 2. 啟動建置並背景執行容器
 docker-compose up -d --build
@@ -248,12 +248,12 @@ docker run -d --name sentinel-cve-db --network sentinel-net \
 # 建置 Docker 映像檔（使用 java-backend/Dockerfile）
 docker build -f java-backend/Dockerfile -t sentinel-cve:latest .
 
-# 執行容器 (帶入 GEMINI_API_KEY 與 DATABASE_URL)
+# 執行容器 (帶入 NVD_API_KEY 與 DATABASE_URL)
 docker run -d \
   --name sentinel-cve-app \
   --network sentinel-net \
   -p 3000:8080 \
-  -e GEMINI_API_KEY="your_api_key_here" \
+  -e NVD_API_KEY="your_nvd_api_key_here" \
   -e PORT=8080 \
   -e DATABASE_URL="postgres://sentinel:sentinel@sentinel-cve-db:5432/sentinel_cve" \
   --restart always \

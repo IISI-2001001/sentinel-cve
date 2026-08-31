@@ -10,8 +10,7 @@ public class ScheduleConfig {
     private boolean enabled;
     private int intervalMinutes;
     private String cronExpression;
-    private String scanScope; // ALL | CRITICAL_HIGH_ONLY
-    private boolean autoAiAnalysis;
+    private String scanScope; // ALL
     private boolean autoNotifyTeams;
     private boolean autoNotifyEmail;
     private String lastRunAt;

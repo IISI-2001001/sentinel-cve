@@ -3,6 +3,7 @@ package com.sentinelcve.provider;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sentinelcve.model.MonitoredProduct;
+import com.sentinelcve.state.AppState;
 import lombok.Data;
 import org.springframework.stereotype.Service;
 
@@ -26,6 +27,24 @@ public class ProductProviderService {
 
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(20)).build();
     private final ObjectMapper mapper = new ObjectMapper();
+    private final AppState state;
+
+    public ProductProviderService(AppState state) {
+        this.state = state;
+    }
+
+    /** Resolves the NVD API key to use: the key saved via 系統管理 > NVD API Key takes priority
+     * over the NVD_API_KEY environment variable, so the UI can override deployment-time config
+     * without a restart. Returns null when neither is configured (anonymous NVD calls). */
+    private String resolveNvdApiKey() {
+        String saved;
+        synchronized (state.lock) {
+            saved = state.nvdApiConfig.getApiKey();
+        }
+        if (saved != null && !saved.isBlank()) return saved;
+        String envKey = System.getenv("NVD_API_KEY");
+        return (envKey != null && !envKey.isBlank()) ? envKey : null;
+    }
 
     @Data
     public static class VersionResult {
@@ -37,6 +56,87 @@ public class ProductProviderService {
         private String sourceUrl;
         private String confidence; // HIGH | MEDIUM | LOW
         private String checkedAt;
+    }
+
+    @Data
+    public static class CpeLookupResult {
+        private String cpe; // base CPE with version wildcarded, e.g. cpe:2.3:a:nginx:nginx:*:*:*:*:*:*:*:*
+        private String vendor;
+        private String product;
+        private String title;
+        private boolean deprecated;
+    }
+
+    /** Queries the NVD CPE Dictionary API's cpeMatchString filter (e.g. cpe:2.3:a:*:vertica) to
+     * list every distinct vendor:product identity NVD has for a free-text product name, so the
+     * user can pick the correct one themselves instead of relying on an automatic best-guess —
+     * NVD's dictionary often has multiple vendor aliases for the same product (e.g. legacy "hp"
+     * vs. current "opentext" for Vertica) and free-text guessing can pick the wrong one. */
+    public List<CpeLookupResult> searchCpeCandidates(String productName) throws Exception {
+        String matchString = "cpe:2.3:a:*:" + productName.toLowerCase(Locale.ROOT).trim().replaceAll("\\s+", "_");
+        String nvdApiKey = resolveNvdApiKey();
+        java.util.Map<String, String> headers = (nvdApiKey != null && !nvdApiKey.isBlank())
+            ? java.util.Map.of("apiKey", nvdApiKey) : java.util.Map.of();
+
+        // Dedupe to one entry per distinct vendor:product pair (ignore the per-version entries),
+        // preferring the non-deprecated one when both a deprecated and a current entry exist for
+        // the same pair, so the candidate list stays short and points at canonical identities.
+        java.util.Map<String, CpeLookupResult> byKey = new java.util.LinkedHashMap<>();
+
+        // NVD paginates results at up to 2000/page (we request 2000); some common product names
+        // (e.g. "redis") have 500+ distinct CPE entries across many vendors, so a single page is
+        // not enough — keep requesting subsequent pages via startIndex until we've seen them all.
+        int resultsPerPage = 2000;
+        int startIndex = 0;
+        int totalResults = Integer.MAX_VALUE;
+        while (startIndex < totalResults) {
+            String url = "https://services.nvd.nist.gov/rest/json/cpes/2.0?cpeMatchString="
+                + java.net.URLEncoder.encode(matchString, java.nio.charset.StandardCharsets.UTF_8)
+                + "&resultsPerPage=" + resultsPerPage + "&startIndex=" + startIndex;
+            JsonNode data = mapper.readTree(fetchTimed(url, "GET", null, headers).body());
+            totalResults = data.path("totalResults").asInt(0);
+
+            for (JsonNode entry : data.path("products")) {
+                JsonNode cpeNode = entry.path("cpe");
+                String cpeName = cpeNode.path("cpeName").asText("");
+                String[] parts = cpeName.split(":");
+                if (parts.length < 5) continue;
+                String vendor = parts[3];
+                String product = parts[4];
+                String title = "";
+                for (JsonNode t : cpeNode.path("titles")) {
+                    if ("en".equals(t.path("lang").asText())) {
+                        title = t.path("title").asText("");
+                        break;
+                    }
+                }
+                boolean deprecated = cpeNode.path("deprecated").asBoolean(false);
+                String key = vendor + ":" + product;
+                CpeLookupResult existing = byKey.get(key);
+                if (existing != null && !existing.isDeprecated()) continue; // keep the non-deprecated one already found
+                CpeLookupResult candidate = new CpeLookupResult();
+                candidate.setVendor(vendor);
+                candidate.setProduct(product);
+                candidate.setTitle(title);
+                candidate.setDeprecated(deprecated);
+                candidate.setCpe("cpe:2.3:a:" + vendor + ":" + product + ":*:*:*:*:*:*:*:*");
+                byKey.put(key, candidate);
+            }
+
+            startIndex += resultsPerPage;
+            if (data.path("products").isEmpty()) break; // safety guard against infinite loop
+        }
+
+        if (byKey.isEmpty()) {
+            throw new RuntimeException("NVD CPE 字典查無「" + productName + "」對應的產品識別資料，請確認產品名稱拼寫是否與官方一致。");
+        }
+
+        // Non-deprecated candidates first (most likely correct/current vendor), each group
+        // alphabetical by vendor for stable, scannable ordering in the UI.
+        return byKey.values().stream()
+            .sorted(java.util.Comparator.comparing(CpeLookupResult::isDeprecated)
+                .thenComparing(CpeLookupResult::getVendor, String.CASE_INSENSITIVE_ORDER))
+            .toList();
     }
 
     private record Identity(String ecosystem, String name) {
@@ -487,7 +587,7 @@ public class ProductProviderService {
         if (cpe != null) {
             String sourceUrl = "https://services.nvd.nist.gov/rest/json/cves/2.0?cpeName=" +
                 java.net.URLEncoder.encode(cpe, java.nio.charset.StandardCharsets.UTF_8) + "&isVulnerable";
-            String nvdApiKey = System.getenv("NVD_API_KEY");
+            String nvdApiKey = resolveNvdApiKey();
             java.util.Map<String, String> headers = (nvdApiKey != null && !nvdApiKey.isBlank())
                 ? java.util.Map.of("apiKey", nvdApiKey) : java.util.Map.of();
             JsonNode nvd = mapper.readTree(fetchTimed(sourceUrl, "GET", null, headers).body());

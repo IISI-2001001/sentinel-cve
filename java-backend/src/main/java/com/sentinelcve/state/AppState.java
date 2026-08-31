@@ -6,13 +6,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * In-memory application state, mirroring the module-level `let products = [...]`, `let
- * cvesDatabase = [...]`, etc. arrays in the original server.ts. All collections are guarded by
- * a single lock because, unlike Node's single-threaded event loop, Spring's embedded Tomcat
- * serves requests on multiple worker threads concurrently.
- *
- * Callers should synchronize on {@link #lock} whenever they read-then-mutate a collection (the
- * same pattern the original code relied on implicitly via JS's single-threaded execution).
+ * In-memory application state, mirroring the module-level arrays in the original server.ts.
+ * All collections are guarded by a single lock because Spring serves requests concurrently.
  */
 public class AppState {
 
@@ -30,5 +25,5 @@ public class AppState {
     public EmailNotificationConfig emailConfig = new EmailNotificationConfig();
     public ScheduleConfig scheduleConfig = new ScheduleConfig();
     public TeamsNotificationConfig teamsConfig = new TeamsNotificationConfig();
-    public AiConfig currentAiConfig = new AiConfig();
+    public NvdApiConfig nvdApiConfig = new NvdApiConfig();
 }

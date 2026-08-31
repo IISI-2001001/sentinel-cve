@@ -58,6 +58,18 @@ public class ScanService {
         return found;
     }
 
+    /** Resolves the NVD API key: saved config (via 系統管理 > NVD API Key) takes priority over
+     * the NVD_API_KEY environment variable. Returns null when neither is configured. */
+    private String resolveNvdApiKey() {
+        String saved;
+        synchronized (state.lock) {
+            saved = state.nvdApiConfig.getApiKey();
+        }
+        if (saved != null && !saved.isBlank()) return saved;
+        String envKey = System.getenv("NVD_API_KEY");
+        return (envKey != null && !envKey.isBlank()) ? envKey : null;
+    }
+
     /** Java port of NVD keyword search fallback used by /api/cves/search. Refreshes from NVD,
      * merges into cvesDatabase, and returns the union of local + fetched matches. */
     public List<CveItem> searchCVEsFromSource(String keyword) {
@@ -80,9 +92,11 @@ public class ScanService {
                 nvdUrl = "https://services.nvd.nist.gov/rest/json/cves/2.0?cveId="
                     + java.net.URLEncoder.encode(keyword.toUpperCase(Locale.ROOT), java.nio.charset.StandardCharsets.UTF_8);
             }
-            HttpRequest request = HttpRequest.newBuilder(URI.create(nvdUrl))
-                .timeout(Duration.ofSeconds(20)).header("User-Agent", "SentinelCVE/1.0").GET().build();
-            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(URI.create(nvdUrl))
+                .timeout(Duration.ofSeconds(20)).header("User-Agent", "SentinelCVE/1.0").GET();
+            String nvdApiKey = resolveNvdApiKey();
+            if (nvdApiKey != null && !nvdApiKey.isBlank()) requestBuilder.header("apiKey", nvdApiKey);
+            HttpResponse<String> response = http.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() / 100 != 2) throw new RuntimeException("NVD API 回傳 HTTP " + response.statusCode());
 
             JsonNode data = mapper.readTree(response.body());

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   FileText,
   X,
-  CheckCircle2,
   AlertTriangle,
   Clock,
   User,
@@ -10,11 +9,6 @@ import {
   Terminal,
   ShieldCheck,
   Building2,
-  ExternalLink,
-  Bot,
-  RefreshCw,
-  Sparkles,
-  Download,
   Check,
 } from 'lucide-react';
 import { Ticket, TicketStatus } from '../types';
@@ -32,7 +26,6 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
 
-  // Priority Badges
   const priorityColors = {
     CRITICAL: 'bg-rose-100 text-rose-800 border-rose-300',
     HIGH: 'bg-amber-100 text-amber-800 border-amber-300',
@@ -55,27 +48,32 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
   };
 
   const handleCopyMarkdown = () => {
+    const cveListMarkdown = ticket.cveList
+      .map((c) => `- **${c.cveId}** (${c.productName}): CVSS ${c.cvss} [${c.severity}] ${c.cisaKev ? '🔥 CISA KEV 攻擊中 ' : ''}- ${c.title}`)
+      .join('\n');
+    const actionStepsMarkdown = ticket.actionSteps
+      .map((s) => `### 步驟 ${s.stepNumber}: ${s.title}\n${s.detail}${s.commandSnippet ? `\n\`\`\`bash\n${s.commandSnippet}\n\`\`\`` : ''}`)
+      .join('\n\n');
     const md = `# [${ticket.ticketNo}] ${ticket.title}
 **專案名稱:** ${ticket.projectName} (${ticket.projectCode})
 **負責人:** ${ticket.assigneeName}
 **優先等級:** ${ticket.priority} | **SLA:** ${ticket.slaHours} 小時內完成修補 (${new Date(ticket.slaDeadline).toLocaleString('zh-TW')})
-**使用 AI 模型:** ${ticket.aiModelUsed}
 
 ---
 
-## 1. 高階資安威脅摘要 (Executive Summary)
+## 1. 高階處置摘要
 ${ticket.executiveSummary}
 
-## 2. 根因剖析 (Root Cause Analysis)
+## 2. 根因剖析
 ${ticket.rootCauseAnalysis}
 
 ## 3. 受影響 CVE 漏洞清單 (共 ${ticket.cveCount} 個)
-${ticket.cveList.map((c) => `- **${c.cveId}** (${c.productName}): CVSS ${c.cvss} [${c.severity}] ${c.cisaKev ? '🔥 CISA KEV 攻擊中' : ''} - ${c.title}`).join('\n')}
+${cveListMarkdown}
 
-## 4. 具體修補步驟 (Action Steps)
-${ticket.actionSteps.map((s) => `### 步驟 ${s.stepNumber}: ${s.title}\n${s.detail}\n${s.commandSnippet ? '```bash\n' + s.commandSnippet + '\n```' : ''}`).join('\n\n')}
+## 4. 具體修補步驟
+${actionStepsMarkdown}
 
-## 5. 權宜防禦規避方案 (Workaround)
+## 5. 權宜防禦規避方案
 ${ticket.mitigationPlan}
 
 ## 6. 修補驗證指引
@@ -90,7 +88,6 @@ ${ticket.verificationMethod}
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/50 backdrop-blur-md overflow-y-auto">
       <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden shadow-2xl my-auto">
-        {/* Header */}
         <div className="p-5 sm:p-6 bg-slate-900 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center space-x-3.5">
             <div className="p-3 bg-blue-600/30 border border-blue-400/30 rounded-2xl text-blue-400 shadow-inner">
@@ -98,32 +95,20 @@ ${ticket.verificationMethod}
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="font-mono text-xs font-bold text-blue-400 tracking-wider">
-                  {ticket.ticketNo}
-                </span>
+                <span className="font-mono text-xs font-bold text-blue-400 tracking-wider">{ticket.ticketNo}</span>
                 <span className={`px-2 py-0.5 text-[10px] font-extrabold border rounded-full ${priorityColors[ticket.priority]}`}>
                   {ticket.priority} 優先級
                 </span>
-                <span className="px-2 py-0.5 text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-400/30 rounded-full flex items-center space-x-1">
-                  <Bot className="w-3 h-3" />
-                  <span>{ticket.aiModelUsed}</span>
-                </span>
               </div>
-              <h2 className="text-lg font-bold text-white mt-0.5 leading-snug">
-                {ticket.title}
-              </h2>
+              <h2 className="text-lg font-bold text-white mt-0.5 leading-snug">{ticket.title}</h2>
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-          >
+          <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Toolbar & Status Bar */}
         <div className="px-6 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-1.5 font-medium text-slate-700">
@@ -152,47 +137,38 @@ ${ticket.verificationMethod}
           </div>
         </div>
 
-        {/* Modal Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar text-slate-800">
-          {/* SLA & Time Alert Box */}
           <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-4 flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <Clock className="w-5 h-5 text-amber-600 shrink-0" />
               <div>
                 <span className="text-xs font-bold text-amber-900">SLA 修補時限 (Fix Deadline): {ticket.slaHours} 小時內</span>
-                <p className="text-xs text-amber-700 font-mono mt-0.5">
-                  目標修補截止時間: {new Date(ticket.slaDeadline).toLocaleString('zh-TW')}
-                </p>
+                <p className="text-xs text-amber-700 font-mono mt-0.5">目標修補截止時間: {new Date(ticket.slaDeadline).toLocaleString('zh-TW')}</p>
               </div>
             </div>
-            <span className="text-xs font-extrabold px-3 py-1 bg-amber-600 text-white rounded-xl shadow-xs">
-              SLA 剩餘時間倒數中
-            </span>
+            <span className="text-xs font-extrabold px-3 py-1 bg-amber-600 text-white rounded-xl shadow-xs">SLA 剩餘時間倒數中</span>
           </div>
 
-          {/* Executive Summary */}
           <div className="space-y-2">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center space-x-2">
-              <Sparkles className="w-4 h-4 text-blue-600" />
-              <span>1. AI 漏洞高階威脅摘要 (Executive Risk Summary)</span>
+              <FileText className="w-4 h-4 text-blue-600" />
+              <span>1. 高階處置摘要</span>
             </h3>
             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-sm text-slate-800 leading-relaxed font-medium">
               {ticket.executiveSummary}
             </div>
           </div>
 
-          {/* Root Cause Analysis */}
           <div className="space-y-2">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center space-x-2">
               <ShieldCheck className="w-4 h-4 text-indigo-600" />
-              <span>2. 底層技術根因剖析 (Root Cause Analysis)</span>
+              <span>2. 底層技術根因剖析</span>
             </h3>
             <div className="p-4 rounded-2xl bg-indigo-50/40 border border-indigo-100 text-sm text-slate-800 leading-relaxed font-mono">
               {ticket.rootCauseAnalysis}
             </div>
           </div>
 
-          {/* Affected CVEs List */}
           <div className="space-y-2">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center space-x-2">
               <AlertTriangle className="w-4 h-4 text-rose-600" />
@@ -206,13 +182,9 @@ ${ticket.verificationMethod}
                     <span className="font-mono text-xs font-bold text-blue-600">{cve.cveId}</span>
                     <div className="flex items-center space-x-1">
                       {cve.cisaKev && (
-                        <span className="px-1.5 py-0.5 text-[9px] font-bold bg-rose-600 text-white rounded">
-                          CISA KEV
-                        </span>
+                        <span className="px-1.5 py-0.5 text-[9px] font-bold bg-rose-600 text-white rounded">CISA KEV</span>
                       )}
-                      <span className="px-1.5 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-700 rounded border border-slate-200">
-                        CVSS {cve.cvss}
-                      </span>
+                      <span className="px-1.5 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-700 rounded border border-slate-200">CVSS {cve.cvss}</span>
                     </div>
                   </div>
                   <p className="text-xs font-bold text-slate-900">{cve.productName}</p>
@@ -222,20 +194,17 @@ ${ticket.verificationMethod}
             </div>
           </div>
 
-          {/* Detailed Remediation Action Steps */}
           <div className="space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center space-x-2">
               <Terminal className="w-4 h-4 text-emerald-600" />
-              <span>4. AI 指引之具體修補處置步驟 (Actionable Steps)</span>
+              <span>4. 具體修補處置步驟</span>
             </h3>
 
             <div className="space-y-3">
               {ticket.actionSteps.map((step) => (
                 <div key={step.stepNumber} className="p-4 rounded-2xl border border-slate-200 bg-white shadow-2xs space-y-2">
                   <div className="flex items-center space-x-2">
-                    <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
-                      {step.stepNumber}
-                    </span>
+                    <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0">{step.stepNumber}</span>
                     <h4 className="text-sm font-bold text-slate-900">{step.title}</h4>
                   </div>
 
@@ -251,29 +220,17 @@ ${ticket.verificationMethod}
             </div>
           </div>
 
-          {/* Mitigation / Workaround */}
           <div className="space-y-2">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              5. 權宜防禦規避方案 (Workaround / WAF Isolation)
-            </h3>
-            <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-200 text-xs text-slate-800 leading-relaxed">
-              {ticket.mitigationPlan}
-            </div>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">5. 權宜防禦規避方案 (Workaround / WAF Isolation)</h3>
+            <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-200 text-xs text-slate-800 leading-relaxed">{ticket.mitigationPlan}</div>
           </div>
 
-          {/* Verification Method */}
           <div className="space-y-2">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              6. 修補驗證與複查機制 (Verification Protocol)
-            </h3>
-            <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-200 text-xs text-slate-800 leading-relaxed font-mono">
-              {ticket.verificationMethod}
-            </div>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">6. 修補驗證與複查機制 (Verification Protocol)</h3>
+            <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-200 text-xs text-slate-800 leading-relaxed font-mono">{ticket.verificationMethod}</div>
           </div>
-
         </div>
 
-        {/* Footer Actions */}
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0">
           <button
             onClick={handleCopyMarkdown}
@@ -283,12 +240,7 @@ ${ticket.verificationMethod}
             <span>{copied ? '已複製 Markdown 工單！' : '複製完整 Markdown 格式工單'}</span>
           </button>
 
-          <button
-            onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors"
-          >
-            關閉視窗
-          </button>
+          <button onClick={onClose} className="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors">關閉視窗</button>
         </div>
       </div>
     </div>

@@ -1,38 +1,28 @@
 package com.sentinelcve.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sentinelcve.model.AlertNotification;
 import com.sentinelcve.model.AlertRule;
 import com.sentinelcve.model.CveItem;
 import com.sentinelcve.model.MonitoredProduct;
-import com.sentinelcve.model.AiAnalysis;
-import com.sentinelcve.model.Ticket;
 import com.sentinelcve.state.AppState;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.UUID;
 
-/** Java port of evaluateAlertRules() / hasClosedVersionTicket() / hasClosedCveTicket() /
- * runConfiguredAlertAutomations() in server.ts. */
+/** Java port of alert rule matching / dedup / notification dispatch. */
 @Service
 public class AlertRuleEngineService {
 
     private final AppState state;
     private final LogService logService;
-    private final StateService stateService;
     private final WebhookDispatchService webhookDispatchService;
-    private final AiService aiService;
-    private final ObjectMapper mapper;
 
-    public AlertRuleEngineService(AppState state, LogService logService, StateService stateService,
-                                   WebhookDispatchService webhookDispatchService, AiService aiService, ObjectMapper mapper) {
+    public AlertRuleEngineService(AppState state, LogService logService,
+                                  WebhookDispatchService webhookDispatchService) {
         this.state = state;
         this.logService = logService;
-        this.stateService = stateService;
         this.webhookDispatchService = webhookDispatchService;
-        this.aiService = aiService;
-        this.mapper = mapper;
     }
 
     public boolean hasClosedVersionTicket(String projectId, String productName) {
@@ -108,38 +98,12 @@ public class AlertRuleEngineService {
                     synchronized (state.lock) {
                         enabledWebhooks = state.webhooks.stream().filter(com.sentinelcve.model.WebhookConfig::isEnabled).toList();
                     }
-                    for (var wh : enabledWebhooks) webhookDispatchService.dispatchWebhook(wh, created);
+                    for (var wh : enabledWebhooks) {
+                        webhookDispatchService.dispatchWebhook(wh, created);
+                    }
                 }
-
-                runConfiguredAlertAutomations(cve, product, created);
             }
         }
         return createdCount;
-    }
-
-    private void runConfiguredAlertAutomations(CveItem cve, MonitoredProduct product, AlertNotification alert) {
-        boolean autoAiAnalysis;
-        synchronized (state.lock) {
-            autoAiAnalysis = state.scheduleConfig.isAutoAiAnalysis();
-        }
-        if (autoAiAnalysis && cve.getAiAnalysis() == null) {
-            try {
-                String prompt = "分析 " + cve.getId() + " 對 " + product.getName() + " 的風險。只回傳 JSON："
-                    + "{\"summary\":\"摘要\",\"impactLevel\":\"" + cve.getCvss().getSeverity() + "\",\"attackScenario\":\"情境\","
-                    + "\"mitigationSteps\":[\"步驟\"],\"workaround\":\"暫解\",\"executiveAdvisory\":\"建議\"}";
-                String aiText = aiService.generateAiText(prompt, state.currentAiConfig, true);
-                AiAnalysis analysis = mapper.readValue(aiText, AiAnalysis.class);
-                analysis.setAnalyzedAt(Instant.now().toString());
-                cve.setAiAnalysis(analysis);
-                logService.addLog("AI_ANALYSIS", "SUCCESS", "自動完成 AI 漏洞剖析: " + cve.getId(), product.getName());
-                stateService.persist();
-            } catch (Exception err) {
-                logService.addLog("AI_ANALYSIS", "ERROR", "自動 AI 漏洞剖析失敗: " + cve.getId() + " - " + safeMessage(err), product.getName());
-            }
-        }
-    }
-
-    static String safeMessage(Exception err) {
-        return err.getMessage() != null ? err.getMessage() : "未知錯誤";
     }
 }

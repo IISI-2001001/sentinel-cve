@@ -12,7 +12,6 @@ public class MonitoredProduct {
     private String vendor;
     private String category; // Operating System | Web Server | Database | Framework/Library | Container/Cloud | Security/Network | Application
     private String cpeKeyword;
-    private String criticality; // CRITICAL | HIGH | MEDIUM | LOW
     private boolean autoScanEnabled;
     private int scanIntervalMinutes;
     private String lastScannedAt;

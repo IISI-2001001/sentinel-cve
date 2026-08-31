@@ -1,6 +1,8 @@
 node_modules
 dist
+target
 .git
 .env
 .DS_Store
 npm-debug.log
+sentinel-cve-db/

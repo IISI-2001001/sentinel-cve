@@ -42,7 +42,6 @@ public class PersistenceRepository {
               position INT NOT NULL,
               id TEXT PRIMARY KEY,
               name TEXT,
-              criticality TEXT,
               data JSONB NOT NULL
             );
             CREATE TABLE IF NOT EXISTS cves (
@@ -95,10 +94,71 @@ public class PersistenceRepository {
               key TEXT PRIMARY KEY,
               value JSONB NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS product_cpe_cache (
+              product_name_key TEXT PRIMARY KEY,
+              product_name TEXT NOT NULL,
+              candidates JSONB NOT NULL,
+              updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
             CREATE INDEX IF NOT EXISTS idx_cves_severity ON cves (severity);
             CREATE INDEX IF NOT EXISTS idx_cves_cisa_kev ON cves (cisa_kev);
             CREATE INDEX IF NOT EXISTS idx_notifications_status ON notifications (status);
+            ALTER TABLE products DROP COLUMN IF EXISTS criticality;
             """);
+    }
+
+    /** Normalizes a product name into the cache lookup key (case/whitespace-insensitive). */
+    public static String cpeCacheKey(String productName) {
+        return productName.toLowerCase(java.util.Locale.ROOT).trim().replaceAll("\\s+", "_");
+    }
+
+    /** Returns the cached NVD CPE candidates for a product name, or null if not cached yet. */
+    public <T> List<T> getCachedCpeCandidates(String productName, Class<T> clazz) {
+        String key = cpeCacheKey(productName);
+        List<String> rows = jdbc.query("SELECT candidates FROM product_cpe_cache WHERE product_name_key = ?",
+            (rs, rowNum) -> rs.getString("candidates"), key);
+        if (rows.isEmpty()) return null;
+        try {
+            com.fasterxml.jackson.databind.JavaType listType = mapper.getTypeFactory().constructCollectionType(List.class, clazz);
+            return mapper.readValue(rows.get(0), listType);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to deserialize cached CPE candidates for " + productName, e);
+        }
+    }
+
+    /** Stores (or replaces) the NVD CPE candidates for a product name in the cache table. */
+    public void saveCpeCandidates(String productName, Object candidates) {
+        String key = cpeCacheKey(productName);
+        jdbc.update("""
+            INSERT INTO product_cpe_cache (product_name_key, product_name, candidates, updated_at)
+            VALUES (?, ?, ?, now())
+            ON CONFLICT (product_name_key) DO UPDATE SET
+              product_name = EXCLUDED.product_name,
+              candidates = EXCLUDED.candidates,
+              updated_at = now()
+            """, key, productName, json(candidates));
+    }
+
+    /** Lists every cached product-name -> CPE-candidates entry, for the CPE management page. */
+    public List<java.util.Map<String, Object>> listCpeCacheEntries() {
+        return jdbc.query("SELECT product_name_key, product_name, candidates, updated_at FROM product_cpe_cache ORDER BY product_name ASC",
+            (rs, rowNum) -> {
+                java.util.LinkedHashMap<String, Object> row = new java.util.LinkedHashMap<>();
+                row.put("productNameKey", rs.getString("product_name_key"));
+                row.put("productName", rs.getString("product_name"));
+                try {
+                    row.put("candidates", mapper.readTree(rs.getString("candidates")));
+                } catch (Exception e) {
+                    throw new SQLException("Failed to parse cached candidates JSON", e);
+                }
+                row.put("updatedAt", rs.getTimestamp("updated_at").toInstant().toString());
+                return row;
+            });
+    }
+
+    /** Deletes a single cached product's CPE candidates by product name. */
+    public void deleteCpeCacheEntry(String productName) {
+        jdbc.update("DELETE FROM product_cpe_cache WHERE product_name_key = ?", cpeCacheKey(productName));
     }
 
     private PGobject json(Object value) {
@@ -134,8 +194,8 @@ public class PersistenceRepository {
 
     public void persistState(AppState state) {
         transactionTemplate.executeWithoutResult(status -> {
-            replaceCollection("products", state.products, new String[]{"id", "name", "criticality"},
-                p -> new Object[]{p.getId(), p.getName(), p.getCriticality()});
+            replaceCollection("products", state.products, new String[]{"id", "name"},
+                p -> new Object[]{p.getId(), p.getName()});
             replaceCollection("cves", state.cvesDatabase, new String[]{"id", "product_name", "severity", "cvss_score", "cisa_kev"},
                 c -> new Object[]{
                     c.getId(),
@@ -157,7 +217,7 @@ public class PersistenceRepository {
             jdbc.update("INSERT INTO app_config (key, value) VALUES (?, ?)", "emailConfig", json(state.emailConfig));
             jdbc.update("INSERT INTO app_config (key, value) VALUES (?, ?)", "scheduleConfig", json(state.scheduleConfig));
             jdbc.update("INSERT INTO app_config (key, value) VALUES (?, ?)", "teamsConfig", json(state.teamsConfig));
-            jdbc.update("INSERT INTO app_config (key, value) VALUES (?, ?)", "currentAiConfig", json(state.currentAiConfig));
+            jdbc.update("INSERT INTO app_config (key, value) VALUES (?, ?)", "nvdApiConfig", json(state.nvdApiConfig));
         });
     }
 
@@ -189,11 +249,12 @@ public class PersistenceRepository {
         EmailNotificationConfig emailConfig = loadConfig("emailConfig", EmailNotificationConfig.class);
         ScheduleConfig scheduleConfig = loadConfig("scheduleConfig", ScheduleConfig.class);
         TeamsNotificationConfig teamsConfig = loadConfig("teamsConfig", TeamsNotificationConfig.class);
-        AiConfig aiConfig = loadConfig("currentAiConfig", AiConfig.class);
+        NvdApiConfig nvdApiConfig = loadConfig("nvdApiConfig", NvdApiConfig.class);
 
         boolean hasAnyPersistedData = !products.isEmpty() || !cves.isEmpty() || !rules.isEmpty()
             || !notifications.isEmpty() || !webhooks.isEmpty() || !logs.isEmpty() || !projects.isEmpty()
-            || !tickets.isEmpty() || emailConfig != null || scheduleConfig != null || teamsConfig != null || aiConfig != null;
+            || !tickets.isEmpty() || emailConfig != null || scheduleConfig != null || teamsConfig != null
+            || nvdApiConfig != null;
 
         if (!hasAnyPersistedData) {
             return false;
@@ -210,7 +271,7 @@ public class PersistenceRepository {
         if (emailConfig != null) state.emailConfig = emailConfig;
         if (scheduleConfig != null) state.scheduleConfig = scheduleConfig;
         if (teamsConfig != null) state.teamsConfig = teamsConfig;
-        if (aiConfig != null) state.currentAiConfig = aiConfig;
+        if (nvdApiConfig != null) state.nvdApiConfig = nvdApiConfig;
         return true;
     }
 

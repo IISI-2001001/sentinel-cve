@@ -4,13 +4,11 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sentinelcve.model.ActionStep;
 import com.sentinelcve.model.EmailNotificationConfig;
-import com.sentinelcve.model.Project;
 import com.sentinelcve.model.Ticket;
 import com.sentinelcve.model.TicketCveInfo;
 import com.sentinelcve.service.LogService;
 import com.sentinelcve.service.MailService;
 import com.sentinelcve.service.StateService;
-import com.sentinelcve.service.TicketService;
 import com.sentinelcve.state.AppState;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -23,7 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
-/** Java port of server.ts lines 974-1244. */
+/** Java port of the ticket CRUD and email endpoints. */
 @RestController
 @RequestMapping("/api")
 public class TicketController {
@@ -32,16 +30,14 @@ public class TicketController {
     private final StateService stateService;
     private final LogService logService;
     private final MailService mailService;
-    private final TicketService ticketService;
     private final ObjectMapper mapper;
 
     public TicketController(AppState state, StateService stateService, LogService logService,
-                            MailService mailService, TicketService ticketService, ObjectMapper mapper) {
+                            MailService mailService, ObjectMapper mapper) {
         this.state = state;
         this.stateService = stateService;
         this.logService = logService;
         this.mailService = mailService;
-        this.ticketService = ticketService;
         this.mapper = mapper;
     }
 
@@ -61,11 +57,6 @@ public class TicketController {
         int slaHours = intOrDefault(payload.get("slaHours"), 72);
         String now = Instant.now().toString();
 
-        String aiModelUsed;
-        synchronized (state.lock) {
-            aiModelUsed = nonBlank(state.currentAiConfig.getModel(), "gemini-3.6-flash");
-        }
-
         Ticket newTicket = new Ticket();
         newTicket.setId("tkt-" + System.currentTimeMillis() + "-" + randomBase36(4));
         newTicket.setTicketNo(nonBlank(asString(payload.get("ticketNo")), "TKT-" + ThreadLocalRandom.current().nextInt(1000, 10000)));
@@ -83,7 +74,6 @@ public class TicketController {
         newTicket.setCveList(cveListOrDefault(payload.get("cveList")));
         newTicket.setSlaHours(slaHours);
         newTicket.setSlaDeadline(nonBlank(asString(payload.get("slaDeadline")), Instant.now().plusSeconds(slaHours * 3600L).toString()));
-        newTicket.setAiModelUsed(nonBlank(asString(payload.get("aiModelUsed")), aiModelUsed));
         newTicket.setExecutiveSummary(nonBlank(asString(payload.get("executiveSummary")), "經評估進行專案套件版本升級或受影響資產 CVE 弱點修補處置。"));
         newTicket.setRootCauseAnalysis(nonBlank(asString(payload.get("rootCauseAnalysis")), "受監控軟體套件存在已知 CVE 弱點或版本過舊，需派發修補工單指派專人處理。"));
         newTicket.setActionSteps(actionStepsOrDefault(payload.get("actionSteps")));
@@ -192,12 +182,16 @@ public class TicketController {
         }
 
         try {
+            String bodyText = ticket.getTitle()
+                + "\n\n專案：" + ticket.getProjectName()
+                + "\n狀態：" + ticket.getStatus()
+                + "\n優先級：" + ticket.getPriority()
+                + "\n\n" + nonBlank(ticket.getExecutiveSummary(), "");
             mailService.sendMail(
                 emailConfig,
                 recipient,
                 "[" + ticket.getPriority() + "] SentinelCVE 修補工單 " + ticket.getTicketNo(),
-                ticket.getTitle() + "\n\n專案：" + ticket.getProjectName() + "\n狀態：" + ticket.getStatus()
-                    + "\n優先級：" + ticket.getPriority() + "\n\n" + nonBlank(ticket.getExecutiveSummary(), "")
+                bodyText
             );
             logService.addLog(
                 "WEBHOOK_DISPATCH",
@@ -219,27 +213,6 @@ public class TicketController {
                 ticket.getProjectName()
             );
             return error(HttpStatus.BAD_GATEWAY, safeMessage(err, "SMTP 寄送失敗"), false);
-        }
-    }
-
-    @PostMapping("/projects/{id}/generate-ticket")
-    public ResponseEntity<?> generateTicket(@PathVariable String id) {
-        Project project;
-        synchronized (state.lock) {
-            project = state.projects.stream().filter(item -> id.equals(item.getId())).findFirst().orElse(null);
-        }
-        if (project == null) {
-            return error(HttpStatus.NOT_FOUND, "專案不存在");
-        }
-
-        try {
-            Ticket ticket = ticketService.generateTicketForProject(project);
-            stateService.persist();
-            return ResponseEntity.ok(ticket);
-        } catch (IllegalArgumentException err) {
-            return error(HttpStatus.BAD_REQUEST, safeMessage(err, "該專案未繫結任何監控產品資產"));
-        } catch (Exception err) {
-            return error(HttpStatus.BAD_GATEWAY, safeMessage(err, "AI 工單產生失敗"), false);
         }
     }
 

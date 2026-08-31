@@ -78,9 +78,7 @@ public class SchedulerService {
 
                 List<MonitoredProduct> targetProds;
                 synchronized (state.lock) {
-                    targetProds = "CRITICAL_HIGH_ONLY".equals(state.scheduleConfig.getScanScope())
-                        ? state.products.stream().filter(p -> "CRITICAL".equals(p.getCriticality()) || "HIGH".equals(p.getCriticality())).toList()
-                        : List.copyOf(state.products);
+                    targetProds = List.copyOf(state.products);
                 }
 
                 int totalAlerts = 0;

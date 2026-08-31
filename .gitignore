@@ -2,6 +2,7 @@ node_modules/
 /data/
 build/
 dist/
+target/
 coverage/
 .DS_Store
 *.log
@@ -11,3 +12,4 @@ coverage/
 *.pem
 *.key
 .vagrant/
+sentinel-cve-db/
