@@ -173,6 +173,7 @@ export default function App() {
               products={products}
               cves={cves}
               notifications={notifications}
+              projects={projects}
               isScanning={isScanning}
               onTriggerScan={handleTriggerScan}
               onSelectCve={(cveId) => setSelectedCveId(cveId)}
@@ -203,7 +204,6 @@ export default function App() {
           {activeTab === 'system-management' && (
             <SystemManager
               projects={projects}
-              products={products}
               emailConfig={emailConfig}
               logs={logs}
               onRefreshData={reloadServerData}

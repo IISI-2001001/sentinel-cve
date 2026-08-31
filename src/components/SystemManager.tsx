@@ -31,7 +31,6 @@ import {
 } from 'lucide-react';
 import {
   Project,
-  MonitoredProduct,
   EmailNotificationConfig,
   ScanLog,
   ScheduleConfig,
@@ -46,30 +45,20 @@ import { SystemLogs } from './SystemLogs';
 
 interface SystemManagerProps {
   projects: Project[];
-  products: MonitoredProduct[];
   emailConfig: EmailNotificationConfig;
   logs: ScanLog[];
   onRefreshData: () => void;
   onSelectCve: (cveId: string) => void;
   defaultSubTab?: 'schedule' | 'cpe-management' | 'org-directory' | 'email-smtp' | 'teams-notification' | 'nvd-api' | 'db-config' | 'logs';
-  onAddProduct?: (product: Partial<MonitoredProduct>) => void;
-  onUpdateProduct?: (id: string, updates: Partial<MonitoredProduct>) => void;
-  onDeleteProduct?: (id: string) => void;
-  onTriggerProductScan?: (productId: string) => void;
 }
 
 export const SystemManager: React.FC<SystemManagerProps> = ({
   projects,
-  products,
   emailConfig,
   logs,
   onRefreshData,
   onSelectCve,
   defaultSubTab = 'schedule',
-  onAddProduct,
-  onUpdateProduct,
-  onDeleteProduct,
-  onTriggerProductScan,
 }) => {
   const [subTab, setSubTab] = useState<
     'schedule' | 'cpe-management' | 'org-directory' | 'email-smtp' | 'teams-notification' | 'nvd-api' | 'db-config' | 'logs'

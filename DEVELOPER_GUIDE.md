@@ -6,7 +6,7 @@
 
 SentinelCVE 是 React/Vite 單頁應用程式與 Java 21 / Spring Boot 3 後端的一體化系統，主要流程為：
 
-1. 建立監控產品與專案，記錄當前版本、CPE/套件識別資訊與專案綁定。
+1. 監控產品資料存於資料庫（由 DB dump 還原或 `SEED_DEMO_DATA` 種子提供，目前無新增/編輯 UI），記錄當前版本、CPE/套件識別資訊；建立專案並綁定所需監控的產品。
 2. 由供應商官網、GitHub Releases、npm、PyPI 等來源取得最新版本。
 3. 由 NVD 與 OSV 等來源查找 CVE，再依產品名、CPE、供應商與專案綁定關聯。
 4. 依專案獨立的版本/CVE 頻率與 CVSS/KEV 條件，透過 Microsoft Teams Webhook 發送 MessageCard。
@@ -24,8 +24,8 @@ Spring Boot app（`java-backend/` / `sentinel-cve-server.jar`）
     ├─ `controller/*` REST Controllers
     │      ▼
     ├─ `service/*` 業務邏輯
-    │      ├─ `ScanService` / `AiService` / `TicketService`
-    │      ├─ `SchedulerService`（30 秒 tick）
+    │      ├─ `ScanService` / `ProjectDigestService` / `CpeCacheService`
+    │      ├─ `SchedulerService`（30 秒 tick，含 CPE 對照自動更新排程）
     │      └─ `StateService`（管理 `AppState`）
     │              ▼
     ├─ `db/PersistenceRepository`
@@ -41,15 +41,17 @@ Spring Boot app（`java-backend/` / `sentinel-cve-server.jar`）
 |---|---|
 | `src/main.tsx` | React DOM 啟動點，將 `App` 掛載至 HTML root。 |
 | `src/App.tsx` | 前端最上層狀態、頁面導覽、API 資料整合；每 10 秒重載產品、專案、CVE、警報與日誌。 |
-| `src/types.ts` | 前後端共用 TypeScript 型別，包含 CVE、產品、專案、通知、AI、工單與排程。 |
-| `src/data/initialData.ts` | 前端示範/初始資料常數；供 UI 與型別開發參考，非正式後端持久化來源。 |
+| `src/types.ts` | 前後端共用 TypeScript 型別，包含 CVE、產品、專案、通知、工單與排程。 |
 | `src/components/Navbar.tsx` | 頂部導覽、掃描快捷鍵、未讀警報與 CVE 開啟。 |
-| `src/components/Dashboard.tsx` | 總覽 KPI、弱點分佈、重點產品狀態、最新 CVE/Alert feed。 |
+| `src/components/Dashboard.tsx` | 總覽 KPI（含由專案管理頁移入的「專案管理總覽指標」4 張卡片）、弱點分佈、重點產品狀態、最新 CVE/Alert feed。無法連上資料庫時顯示連線失敗提示 banner。 |
 | `src/components/ProjectManager.tsx` | 專案 CRUD、產品綁定、版本矩陣、CVE 清單、獨立通知頻率、Teams Webhook、手動通知、工單生命週期與結案區。 |
-| `src/components/ProductManager.tsx` | 產品新增/編輯/刪除、目前版本、識別欄位、單筆/批次版本檢查。 |
-| `src/components/SystemManager.tsx` | 全域掃描排程、監控產品、稽核日誌、AI/LLM 設定。Teams Webhook 正式流程不在此設定，而在各專案設定。 |
+| `src/components/SystemManager.tsx` | 系統管理與設定中心：全域掃描排程、CPE 對照管理、組織清單管理、NVD API Key、資料庫連線設定、稽核日誌。Teams Webhook 正式流程不在此設定，而在各專案設定。 |
+| `src/components/CpeManager.tsx` | 「產品管理」分頁：檢視/手動編輯/刪除 `product_cpe_cache` 快取項目，並可對單一產品或全部項目觸發 NVD CPE 重新查詢。 |
+| `src/components/OrgDirectoryManager.tsx` | 組織清單管理：維護部門/單位清單，供專案綁定歸屬部門使用。 |
+| `src/components/NvdApiKeyManager.tsx` | NVD API Key 管理：設定/測試 `NVD_API_KEY`，提升 NVD CVE/CPE 查詢速率限制。 |
+| `src/components/DbConnectionManager.tsx` | 資料庫連線管理：於 UI 中設定/測試 PostgreSQL 連線字串，寫入 `java-backend/config/db.properties`，套用需重啟後端。 |
 | `src/components/SystemLogs.tsx` | 稽核日誌顯示、狀態與類型篩選。 |
-| `src/components/CveDetailModal.tsx` | CVE 詳細資訊、CVSS vector、KEV、參考連結與 AI 剖析。 |
+| `src/components/CveDetailModal.tsx` | CVE 詳細資訊、CVSS vector、KEV 與參考連結。 |
 | `src/components/TicketDetailModal.tsx` | 工單詳情、狀態變更與 Markdown 匯出。 |
 | `src/components/Documentation.tsx` | 系統內建使用手冊、名詞、資料來源、SOP、流程與 FAQ。 |
 | `src/index.css` | Tailwind CSS 入口與全域視覺樣式。 |
@@ -61,14 +63,14 @@ Spring Boot app（`java-backend/` / `sentinel-cve-server.jar`）
 | `java-backend/src/main/resources/application.yml` | Spring Boot 組態，目前含 `server.port` 與 logging level。 |
 | `java-backend/src/main/resources/demo-data.json` | `SEED_DEMO_DATA=true` 且資料庫為空時使用的示範資料集。 |
 | `java-backend/src/main/java/com/sentinelcve/SentinelCveApplication.java` | Spring Boot 啟動入口；啟用 `@EnableAsync` / `@EnableScheduling`，並以 `CommandLineRunner` 呼叫 `stateService.initAndLoad()`。 |
-| `java-backend/src/main/java/com/sentinelcve/controller/*.java` | 16 支 REST Controller：Product、Cve、Project、Ticket、Rule、Webhook、Alert、Log、Report、AiConfig、EmailConfig、ScheduleConfig、TeamsConfig、ProductCatalog、Health、SpaFallback。 |
-| `java-backend/src/main/java/com/sentinelcve/service/*.java` | 核心業務邏輯：`ScanService`、`AiService`、`MailService`、`WebhookDispatchService`、`AlertRuleEngineService`、`SchedulerService`、`TicketService`、`ProjectDigestService`、`StateService`、`LogService`。 |
-| `java-backend/src/main/java/com/sentinelcve/model/*.java` | 21 個 Java POJO，對應前端 `src/types.ts`，由 Jackson 以 camelCase 序列化/反序列化。 |
+| `java-backend/src/main/java/com/sentinelcve/controller/*.java` | 17 支 REST Controller：Product（唯讀）、Cve、Project、Ticket、Rule、Webhook、Alert、Log、ScheduleConfig、EmailConfig、TeamsConfig、CpeCache、NvdConfig、OrgDirectory、DbConfig、Health、SpaFallback。 |
+| `java-backend/src/main/java/com/sentinelcve/service/*.java` | 9 個核心業務邏輯服務：`ScanService`、`MailService`、`WebhookDispatchService`、`AlertRuleEngineService`、`SchedulerService`、`ProjectDigestService`、`CpeCacheService`、`StateService`、`LogService`。 |
+| `java-backend/src/main/java/com/sentinelcve/model/*.java` | 19 個 Java POJO，對應前端 `src/types.ts`，由 Jackson 以 camelCase 序列化/反序列化。 |
 | `java-backend/src/main/java/com/sentinelcve/state/AppState.java` | 記憶體中的全域應用狀態；啟動時由 PostgreSQL 載入，各 service 在鎖保護下讀寫。 |
-| `java-backend/src/main/java/com/sentinelcve/db/PersistenceRepository.java` | PostgreSQL 持久化層；每個集合對應一張表，完整物件寫入 `data JSONB`，並抽出查詢索引欄位。 |
-| `java-backend/src/main/java/com/sentinelcve/config/DataSourceConfig.java` | 依 `DATABASE_URL` 或 PG* 環境變數建立 HikariCP `DataSource`。 |
-| `java-backend/src/main/java/com/sentinelcve/catalog/ProductCatalog.java` | 內建產品目錄、別名、供應商、類別、CPE 範本與 catalog enrichment；由舊 `productCatalog.ts` 移植。 |
-| `java-backend/src/main/java/com/sentinelcve/provider/ProductProviderService.java` | 官方版本與 CVE 相關 provider；負責 HTTP timeout、版本解析、穩定版篩選、NVD/OSV 映射；由舊 `productProviders.ts` 移植。 |
+| `java-backend/src/main/java/com/sentinelcve/db/PersistenceRepository.java` | PostgreSQL 持久化層；每個集合對應一張表，完整物件寫入 `data JSONB`，並抽出查詢索引欄位，另外管理 `product_cpe_cache` 快取表。 |
+| `java-backend/src/main/java/com/sentinelcve/config/DataSourceConfig.java` | 建立 HikariCP `DataSource`：優先讀取 `java-backend/config/db.properties`（由「資料庫連線管理」UI 寫入），其次 `DATABASE_URL`，最後 PG* 環境變數。 |
+| `java-backend/src/main/java/com/sentinelcve/config/DbConfigFileStore.java` / `db/DatabaseUrlUtil.java` | 讀寫本機 `config/db.properties` 覆寫檔，並負責 `postgres://user:pass@host:port/db` URL 的拆解/組裝。 |
+| `java-backend/src/main/java/com/sentinelcve/provider/ProductProviderService.java` | 官方版本與 CVE 相關 provider；負責 HTTP timeout、版本解析、穩定版篩選、NVD/OSV 映射，以及 NVD CPE 查詢（供 CPE 對照快取使用）。 |
 | `docker-compose.yml` | 啟動 PostgreSQL 與 Spring Boot 應用；由 `java-backend/Dockerfile` 建置，對外映射 `3000:8080`，並設定 DB/app healthcheck。 |
 | `.dockerignore` | 排除 dependencies、dist、Git、`.env` 與本機器雜項。 |
 | `package.json` | 前端專用 scripts 與 npm dependencies；`dev` 為 `vite`、`build` 為 `vite build`、`lint` 為 `tsc --noEmit`。 |
@@ -89,17 +91,17 @@ Spring Boot 啟動時，`SentinelCveApplication` 會透過 `StateService.initAnd
 - 若資料庫為空且設定 `SEED_DEMO_DATA=true`，啟動時會將 classpath 中的 `demo-data.json` 種入 PostgreSQL。
 - Webhook URL 與 API key 屬敏感資料；不應提交 `.env`，資料庫憑證也不應硬編碼進 image 或 Git。
 
-## 5. 產品目錄與識別
+## 5. 產品識別與 CPE 對照
 
-### 5.1 Catalog enrichment
+### 5.1 CPE 對照快取（取代舊 catalog enrichment）
 
-`findCatalogEntry()` 會將輸入名稱正規化（小寫、移除大部分符號），再與 catalog 名稱與 aliases 比對。`enrichProductFromCatalog()` 會補上：
+舊版 `catalog/ProductCatalog.java`（內建產品目錄、別名、CPE 範本）已移除，且目前後端**沒有**新增/編輯/刪除 `MonitoredProduct` 的 API（`ProductController` 僅提供 `GET /api/products` 唯讀清單）。監控產品資料完全由資料庫既有內容（還原的 DB dump 或 `SEED_DEMO_DATA` 種子資料）提供，前端不再有「新增產品」流程。
 
-- 標準產品名與供應商。
-- `sourceType`、repository、ecosystem/package name、vendor release URL。
-- 依當前版本展開的 CPE template。
+產品與 CPE 的對應改由獨立的 **CPE 對照快取**（`product_cpe_cache` 表）機制處理：
 
-使用者自訂欄位應優先保留，catalog 只用於補齊缺少資訊。
+- `CpeCacheService` / `CpeCacheController`（`/api/cpe-cache/*`）以 `productName` 為 key，呼叫 `ProductProviderService.searchCpeCandidates()` 向 NVD 查詢候選 CPE（vendor:product，版本萬用字元化），存入快取。
+- 管理者可在「系統管理與設定中心 → 產品管理」（`CpeManager.tsx`）手動刷新單一產品、批次刷新全部（`/api/cpe-cache/refresh-all`，與 `SchedulerService` 的 CPE 自動更新排程呼叫同一函式）、手動新增/覆寫或刪除快取項目。
+- 此快取只影響 CVE 查詢時使用的 CPE 字串，**不會**建立或修改 `MonitoredProduct` 記錄本身。
 
 ### 5.2 版本來源選擇
 
@@ -161,6 +163,7 @@ NVD 轉換優先順序為 CVSS 3.1、3.0、2.0。severity 正規化為 `CRITICAL
 - 依 `scheduleConfig.nextRunAt` 執行所有產品或僅 critical/high 產品。
 - 執行 CVE Provider，寫回 `detectedCveCount` 與 `lastScannedAt`。
 - 對查得 CVE 執行 `evaluateAlertRules()`。
+- 若 `scheduleConfig.cpeAutoUpdateEnabled` 為 true，依 `cpeNextRunAt`/`cpeUpdateIntervalMinutes`（預設 1440 分鐘，即 24 小時）呼叫 `CpeCacheService.refreshAllCachedCpe()`，重新向 NVD 查詢已快取產品的 CPE 對照並更新 `cpeLastRunAt`/`cpeNextRunAt`。此排程設定可在「系統管理與設定中心 → 掃描排程」（`ScheduleConfigController`，`/api/schedule/config`）調整。
 
 ### 7.2 Alert rule
 
@@ -238,37 +241,36 @@ Rule 必須啟用，且需符合：
 
 `hasClosedVersionTicket()` 與 `hasClosedCveTicket()` 是後端通知排除的權威判斷。前端也將已結案項目移至「不再通知」區。只有 `CLOSED` 會停止通知；`RESOLVED` 尚未結案。
 
-## 10. AI 模組
+## 10. NVD CPE 對照與其他系統設定模組
 
-`AiService.generateAiText()` 支援：
+原本的 AI 模組（`AiService`、`/api/ai/*`、Gemini/OpenAI/Ollama/Claude 整合）已自程式碼移除；CVE 詳情不再提供 AI 摘要/剖析，工單也不再有 AI 綜合草案功能。目前「系統管理與設定中心」下的設定型模組為：
 
-- Google Gemini REST API。
-- OpenAI API、Ollama 與自訂 OpenAI-compatible endpoint。
-- Anthropic Claude Messages API。
-
-AI 用於 CVE 影響摘要、根因、攻擊情境、減緩、修補步驟、複測方法與綜合工單草案。AI 輸出不是官方公告，不應未複核就在生產環境執行指令。
-
-API 對外回傳 AI 設定時會用布林值表示 key 是否存在，不回傳明文 key。
+| 模組 | Controller/Service | 用途 |
+|---|---|---|
+| CPE 對照管理 | `CpeCacheController` / `CpeCacheService` | 管理 `product_cpe_cache`，見 §5.1；支援手動/排程自動刷新。 |
+| 組織清單管理 | `OrgDirectoryController` | 維護部門（`/departments`）、專案負責人（`/project-managers`）、部署環境（`/environments`）清單，供專案綁定使用。 |
+| NVD API Key | `NvdConfigController`（`/api/nvd/config`, `/api/nvd/test`） | 設定/測試 `NVD_API_KEY`，用於提升 NVD CVE/CPE 查詢速率限制；對外回傳布林值表示 key 是否存在，不回傳明文。 |
+| 資料庫連線管理 | `DbConfigController`（`/api/system/db-config`） | 見 §4；於 UI 設定/測試 PostgreSQL 連線並寫入 `config/db.properties`，套用需重啟後端。 |
+| Email / Teams 設定 | `EmailConfigController` / `TeamsConfigController` | 全域 SMTP 與 Teams Webhook 設定，供 `MailService`/`WebhookDispatchService` 使用（專案層級的 Teams 通知另見 §8）。 |
 
 ## 11. 主要 API 分組
 
 | 分組 | 端點摘要 |
 |---|---|
 | Health | `GET /api/health` |
-| Products | `GET/POST /api/products`, `PUT/DELETE /api/products/:id`, `POST /api/products/:id/check-version`, `POST /api/products/check-all-versions` |
-| Catalog | `GET /api/product-catalog`, `POST /api/product-catalog/check-all-versions` |
-| CVE | `GET /api/cves`, `GET /api/cves/search`, `POST /api/cves/scan`, `POST /api/cve/ai-assess` |
+| Products | `GET /api/products`（唯讀；目前無新增/編輯/刪除 API，資料完全來自資料庫既有內容或 `SEED_DEMO_DATA` 種子） |
+| CVE | `GET /api/cves`, `GET /api/cves/search`, `POST /api/cves/scan` |
 | Projects | `GET/POST /api/projects`, `PUT/DELETE /api/projects/:id` |
 | Project Teams | `POST /api/projects/:id/notify-teams-test`, `notify-version-now`, `notify-cve-now` |
-| Tickets | `GET/POST /api/tickets`, `GET/PUT/DELETE /api/tickets/:id`, `POST /api/projects/:id/generate-ticket` |
-| Scheduler | `GET/PUT /api/schedule/config`, `POST /api/schedule/run-now` |
+| Tickets | `GET/POST /api/tickets`, `GET/PUT/DELETE /api/tickets/:id`, `POST /api/tickets/:id/email` |
+| Scheduler | `GET/PUT /api/schedule/config`, `POST /api/schedule/run-now`（含 CPE 自動更新排程設定） |
 | Alerts/rules | `/api/alerts*`, `/api/rules*`, `/api/webhooks*` |
-| AI | `GET/PUT /api/ai/config`, `POST /api/ai/test`, `POST /api/reports/generate` |
+| CPE 對照快取 | `GET /api/cpe-cache`, `POST /api/cpe-cache/refresh`, `POST /api/cpe-cache/refresh-all`, `POST /api/cpe-cache`（手動存入）, `DELETE /api/cpe-cache/:productName` |
+| NVD 設定 | `GET/PUT /api/nvd/config`, `POST /api/nvd/test` |
+| 組織清單 | `GET /api/org-directory`, `POST/DELETE /api/org-directory/departments/*`, `/project-managers/*`, `/environments/*` |
+| 資料庫連線設定 | `GET/PUT /api/system/db-config`, `POST /api/system/db-config/test` |
+| Email / Teams 設定 | `GET/PUT /api/email/config`, `POST /api/email/test`；`GET/PUT /api/teams/config`, `POST /api/teams/test`（全域設定，專案層級 Teams 通知走 Project Teams 分組） |
 | Logs | `GET /api/logs` |
-
-### 舊版相容端點
-
-`/api/email/*`、`/api/tickets/:id/email` 與全域 `/api/teams/*` 仍留在後端，但目前正式 UI 已移除 Email 與全域 Teams 設定，專案通知以專案 owner/handler Teams Webhook 為準。新功能不應依賴這些舊端點；若要刪除，應先做 persisted-state/API 相容性盤點。
 
 ## 12. 開發與驗證
 
@@ -305,7 +307,9 @@ docker inspect --format '{{.State.Health.Status}}' sentinel-cve-app
 | `DATABASE_URL` | PostgreSQL 連線字串；後端所有狀態資料皆持久化於此。 |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `docker-compose.yml` 啟動 PostgreSQL 時使用，並用來組裝預設 `DATABASE_URL`。 |
 | `SEED_DEMO_DATA` | `true` 時，首次連到空資料庫會匯入示範資料。 |
-| `GEMINI_API_KEY` | Gemini API key；不可寫進 image 或 Git。 |
+| `NVD_API_KEY` | NVD API 2.0 金鑰；提升 CVE/CPE 查詢速率限制，可透過環境變數或「系統管理與設定中心 → NVD API Key」UI 設定（`NvdConfigController`）。不可寫進 image 或 Git。 |
+
+資料庫連線亦可改由「系統管理與設定中心 → 資料庫連線管理」UI 設定，寫入具名 volume 中的 `java-backend/config/db.properties`；該檔案存在時優先於 `DATABASE_URL` 環境變數（見 §4）。`docker-compose.yml` 需額外掛載 `dbconfig:/app/config` volume 才能持久化此設定。
 
 EC2/VM 部署時，除了容器 healthy，還要檢查 Security Group/firewall 是否放行對外 port。建議只允許測試 IP，或放在 TLS reverse proxy 後方，不要將測試服務無限制開放。
 
@@ -319,11 +323,11 @@ EC2/VM 部署時，除了容器 healthy，還要檢查 Security Group/firewall �
 6. **CVE 關聯規則不完全一致**：前端較寬鬆，後端 digest 較嚴格；應抽出共用 matching service 與測試資料。
 7. **排程為進程內 scheduler**：重啟後依 persisted next-run 繼續，但沒有 distributed lock。多 replica 會重複執行。
 8. **MessageCard 容量**：目前限制顯示 30 項；大型專案應加入系統深連結、分頁或 Adaptive Card/Workflow 處理。
-9. **舊 API 尚未移除**：Email 與全域 Teams 相容端點仍在後端，後續應在有 migration plan 時正式下線。
+9. **監控產品無新增/編輯/刪除 API**：`ProductController` 目前僅提供 `GET /api/products`；新增資產只能透過直接寫入資料庫（如還原 dump 或 `SEED_DEMO_DATA`）完成，尚無對應的管理 UI/API，應評估是否需要補齊或改以匯入流程取代。
 
 ## 15. 內建產品追蹤來源完整清單
 
-本節以 `catalog/ProductCatalog.java` 與 `provider/ProductProviderService.java` 的**目前實際程式執行順序**為準，而不是只看目錄中的 `sourceType`。`getLatestVersion()` 會先檢查 `EOL_PRODUCT_SLUGS`；命中的產品會優先使用 endoflife.date，即使目錄原本標為 vendor 或 GitHub。
+本節以 `provider/ProductProviderService.java` 的**目前實際程式執行順序**為準（舊版 `catalog/ProductCatalog.java` 已移除，這些 adapter 的觸發條件已改為在 `ProductProviderService` 內以產品名稱直接判斷，不再依賴目錄中的 `sourceType`）。`getLatestVersion()` 會先檢查 `EOL_PRODUCT_SLUGS`；命中的產品會優先使用 endoflife.date。
 
 ### 15.1 版本與 CVE 來源總表
 
@@ -366,19 +370,18 @@ EC2/VM 部署時，除了容器 healthy，還要檢查 Security Group/firewall �
 - **GitHub**：呼叫 `GET /repos/{owner}/{repo}/releases?per_page=100`；排除 draft、prerelease 與預覽標籤。若沒有可用 release，再呼叫 tags API。程式目前未設定 GitHub Token，可能受匿名 rate limit 影響。
 - **原廠 HTML/API**：Python 使用官方 JSON API；其他 vendor Adapter 多數抓取 HTML 後用正規表示式解析。只要上游文案、語系或 DOM 改變，就可能回報「尚無可靠解析規則」，不會把當前版本假裝成最新版。
 - **NVD**：以完整 CPE（將 template 的 version 欄替換為產品目前版本）呼叫 CVE 2.0 API，並加上 `isVulnerable`。若有 `NVD_API_KEY` 則帶入 request header。查詢結果以 `NVD_CPE_APPLICABILITY`、`HIGH` match confidence 記錄。
-- **OSV**：只有產品具 PURL，或 ecosystem 為 npm/PyPI 且有 packageName 時才查詢。目前內建目錄中 Apache Airflow 具 PyPI identity。OSV 與 NVD 同時命中同一 CVE 時以 CVE ID 合併資料來源。
+- **OSV**：只有產品具 PURL，或 ecosystem 為 npm/PyPI 且有 packageName 時才查詢。以上表中 Apache Airflow 為例，具 PyPI identity。OSV 與 NVD 同時命中同一 CVE 時以 CVE ID 合併資料來源。
 - **目前版本是必要輸入**：版本通知是比較 `currentVersion` 與 `latestSecureVersion`；CVE 查詢也要把 `currentVersion` 放進 CPE/PURL。沒有目前版本時，結果不能代表該實例的實際風險。
 - **`latestSecureVersion` 的語意限制**：目前 Provider 將「最新穩定版本」同時填入 `latestVersion` 與 `latestSecureVersion`，尚未逐項證明它是特定主線、LTS 或 backport 政策下的最低安全修補版。
 
 ### 15.3 維護時的完整性檢查
 
-產品來源變更後，至少要執行 `/api/product-catalog/check-all-versions`，逐項確認 `success`、`sourceUrl`、`confidence`、解析版本及失敗原因。CVE 部分則需使用具代表性的目前版本逐項呼叫掃描，不能只用「API 沒拋錯」判定正確；零筆結果可能是真正無漏洞，也可能是 CPE 版本、產品名稱或上游資料涵蓋不足。
+產品來源變更後，後端已無全域「檢查所有產品最新版本」的獨立端點（舊 `/api/product-catalog/check-all-versions` 已隨 `ProductCatalogController` 移除）。目前驗證方式為：對綁定該產品的專案呼叫 `POST /api/projects/:id/notify-version-now`（`force=true`，見 §8.2 第 7 點）觸發 `ProjectDigestService` 重新執行 `ProductProviderService.getLatestVersion()`，再檢查回傳/日誌中的 `success`、`sourceUrl`、`confidence`、解析版本及失敗原因。CVE 部分則需使用具代表性的目前版本逐項呼叫 `POST /api/cves/scan`，不能只用「API 沒拋錯」判定正確；零筆結果可能是真正無漏洞，也可能是 CPE 版本、產品名稱或上游資料涵蓋不足。
 
 ## 16. 新增產品 Adapter 清單
 
-1. 在 `catalog/ProductCatalog.java` 新增名稱、aliases、vendor、category 與來源 metadata。
-2. 優先使用結構化官方 API/registry；最後才使用 HTML parser。
-3. 在 `provider/ProductProviderService.getLatestVersion()` 新增 adapter，排除預覽版並回傳 `sourceUrl`、`confidence`、`checkedAt`。
-4. 配置 CPE template 或 ecosystem/package identity。
-5. 測試當前版、最新版、失敗情境、rate limit 與通知 signature。
-6. 以 `/api/product-catalog/check-all-versions` 執行內建目錄批次稽核，不可只以 UI 顯示作為通過標準。
+1. 優先使用結構化官方 API/registry；最後才使用 HTML parser。
+2. 在 `provider/ProductProviderService.getLatestVersion()`（或其呼叫的 `getVendorVersion()`/`getEndOfLifeVersion()`）新增/調整 adapter，依產品名稱判斷分流，排除預覽版並回傳 `sourceUrl`、`confidence`、`checkedAt`。
+3. 若需要 CPE 對照，透過「系統管理與設定中心 → 產品管理」（`CpeManager.tsx` / `/api/cpe-cache/refresh`）觸發 NVD 查詢並存入快取；若有 ecosystem/package identity，於 `MonitoredProduct` 記錄上設定供 OSV 查詢使用。
+4. 測試當前版、最新版、失敗情境、rate limit 與通知 signature。
+5. 依 §15.3 方式（`notify-version-now` + `force=true`、`POST /api/cves/scan`）逐項驗證，不可只以 UI 顯示作為通過標準。

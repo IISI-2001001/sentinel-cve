@@ -110,11 +110,27 @@ public class PersistenceRepository {
               name TEXT NOT NULL UNIQUE,
               created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             );
+            CREATE TABLE IF NOT EXISTS deployment_environments (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL UNIQUE,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
             CREATE INDEX IF NOT EXISTS idx_cves_severity ON cves (severity);
             CREATE INDEX IF NOT EXISTS idx_cves_cisa_kev ON cves (cisa_kev);
             CREATE INDEX IF NOT EXISTS idx_notifications_status ON notifications (status);
             ALTER TABLE products DROP COLUMN IF EXISTS criticality;
             """);
+        seedDefaultDeploymentEnvironmentsIfEmpty();
+    }
+
+    /** Seeds the deployment-environment lookup table with DEV/SIT/UAT/PRD on first run only. */
+    private void seedDefaultDeploymentEnvironmentsIfEmpty() {
+        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM deployment_environments", Integer.class);
+        if (count != null && count == 0) {
+            for (String name : List.of("DEV", "SIT", "UAT", "PRD")) {
+                addDeploymentEnvironment(name);
+            }
+        }
     }
 
     /** Normalizes a product name into the cache lookup key (case/whitespace-insensitive). */
@@ -211,6 +227,28 @@ public class PersistenceRepository {
 
     public void deleteProjectManager(String id) {
         jdbc.update("DELETE FROM project_managers WHERE id = ?", id);
+    }
+
+    /** Deployment environments (e.g. DEV/SIT/UAT/PRD) — maintained under 系統管理與設定中心 so that
+     * the 使用產品清單 binding form can offer them as dropdown selections, and users can add new
+     * environments on demand instead of being limited to a hardcoded list. */
+    public List<java.util.Map<String, Object>> listDeploymentEnvironments() {
+        return jdbc.query("SELECT id, name, created_at FROM deployment_environments ORDER BY created_at ASC", orgEntryMapper());
+    }
+
+    public java.util.Map<String, Object> addDeploymentEnvironment(String name) {
+        String id = "env-" + System.currentTimeMillis() + "-" + java.util.UUID.randomUUID().toString().substring(0, 8);
+        jdbc.update("""
+            INSERT INTO deployment_environments (id, name) VALUES (?, ?)
+            ON CONFLICT (name) DO NOTHING
+            """, id, name);
+        List<java.util.Map<String, Object>> rows = jdbc.query(
+            "SELECT id, name, created_at FROM deployment_environments WHERE name = ?", orgEntryMapper(), name);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    public void deleteDeploymentEnvironment(String id) {
+        jdbc.update("DELETE FROM deployment_environments WHERE id = ?", id);
     }
 
     private RowMapper<java.util.Map<String, Object>> orgEntryMapper() {

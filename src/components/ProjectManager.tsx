@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FolderKanban,
   Plus,
@@ -59,7 +59,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   // Navigation level state: null = Level 1 (Summary List), Project = Level 2 (Project Detail & Settings)
   const [activeProjectDetail, setActiveProjectDetail] = useState<Project | null>(null);
   const [activeDetailSubTab, setActiveDetailSubTab] = useState<
-    'general' | 'notifications' | 'products' | 'version-matrix' | 'vulnerabilities' | 'tickets'
+    'general' | 'notifications' | 'products' | 'version-matrix' | 'vulnerabilities'
   >('general');
 
   // CVE List State
@@ -91,6 +91,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   // used to populate the dropdowns in the 新增/編輯專案 form.
   const [orgDepartments, setOrgDepartments] = useState<string[]>([]);
   const [orgProjectManagers, setOrgProjectManagers] = useState<string[]>([]);
+  const [orgDeploymentEnvironments, setOrgDeploymentEnvironments] = useState<string[]>([]);
 
   useEffect(() => {
     fetch('/api/org-directory')
@@ -98,6 +99,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
       .then((data) => {
         setOrgDepartments((data.departments || []).map((d: { name: string }) => d.name));
         setOrgProjectManagers((data.projectManagers || []).map((p: { name: string }) => p.name));
+        setOrgDeploymentEnvironments((data.deploymentEnvironments || []).map((e: { name: string }) => e.name));
       })
       .catch((err) => console.warn('Failed to fetch org directory:', err));
   }, []);
@@ -478,7 +480,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   const [bindingModalOpen, setBindingModalOpen] = useState(false);
   const [bindProductId, setBindProductId] = useState('');
   const [bindTargetVersion, setBindTargetVersion] = useState('');
-  const [bindEnvironment, setBindEnvironment] = useState<'Production' | 'Staging' | 'Testing' | 'Development'>('Production');
+  const [bindEnvironment, setBindEnvironment] = useState<string>('');
   const [bindCustomNotes, setBindCustomNotes] = useState('');
 
   // Email Config Form State
@@ -511,6 +513,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   // still shows up as a selectable option so it isn't silently dropped when editing.
   const departmentOptions = Array.from(new Set([...orgDepartments, formDepartment].filter(Boolean)));
   const projectManagerOptions = Array.from(new Set([...orgProjectManagers, formOwnerName].filter(Boolean)));
+  const environmentOptions = Array.from(new Set([...orgDeploymentEnvironments, bindEnvironment].filter(Boolean)));
 
   // Filtered Projects
   const filteredProjects = projects.filter((p) => {
@@ -642,6 +645,10 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
       alert('請選擇要套用的產品！');
       return;
     }
+    if (!bindTargetVersion.trim()) {
+      alert('請輸入此專案特定套用版本號！');
+      return;
+    }
 
     const prodObj = products.find((p) => p.id === bindProductId);
     if (!prodObj) return;
@@ -652,7 +659,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
       productName: prodObj.name,
       vendor: prodObj.vendor,
       cpeKeyword: prodObj.cpeKeyword,
-      targetVersion: bindTargetVersion || prodObj.currentVersion || '1.0.0',
+      targetVersion: bindTargetVersion.trim(),
       environment: bindEnvironment,
       customNotes: bindCustomNotes,
       boundAt: new Date().toISOString(),
@@ -1046,18 +1053,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveDetailSubTab('notifications')}
-            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              activeDetailSubTab === 'notifications'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <Bell className="w-4 h-4" />
-            <span>2. 通知管道與頻率設定</span>
-          </button>
-
-          <button
             onClick={() => setActiveDetailSubTab('products')}
             className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
               activeDetailSubTab === 'products'
@@ -1066,7 +1061,19 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
             }`}
           >
             <Layers className="w-4 h-4" />
-            <span>3. 產品與特定版本套用 ({prjProducts.length})</span>
+            <span>2. 使用產品清單 ({prjProducts.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDetailSubTab('notifications')}
+            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              activeDetailSubTab === 'notifications'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Bell className="w-4 h-4" />
+            <span>3. 通知管道與頻率設定</span>
           </button>
 
           <button
@@ -1091,18 +1098,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
           >
             <ShieldAlert className="w-4 h-4" />
             <span>5. 專案資產弱點列表 ({prjCves.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveDetailSubTab('tickets')}
-            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              activeDetailSubTab === 'tickets'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <FileText className="w-4 h-4" />
-            <span>6. 專案工單與執行狀況 ({prjTickets.length})</span>
           </button>
         </div>
 
@@ -1173,7 +1168,120 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
           </div>
         )}
 
-        {/* SUB TAB 2: Notifications & Frequency Settings */}
+        {/* SUB TAB 2: Products & Target Version Bindings (使用產品清單) */}
+        {activeDetailSubTab === 'products' && (
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900 flex items-center space-x-2">
+                  <Layers className="w-4 h-4 text-blue-600" />
+                  <span>套用到此專案之資產產品與特定版本</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  可為不同專案個別指定產品的「目標套用版本號」、「部署環境」與「自訂備註」
+                </p>
+              </div>
+
+              <button
+                onClick={() => {
+                  setBindProductId(products[0]?.id || '');
+                  setBindTargetVersion('');
+                  setBindEnvironment(orgDeploymentEnvironments[0] || '');
+                  setBindingModalOpen(true);
+                }}
+                className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center space-x-1.5 transition-colors shadow-2xs"
+              >
+                <Plus className="w-4 h-4" />
+                <span>新增產品與特定版本套用</span>
+              </button>
+            </div>
+
+            {prjProducts.length === 0 ? (
+              <div className="p-8 text-center text-slate-500 border border-dashed border-slate-200 rounded-2xl">
+                <Boxes className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs font-semibold text-slate-700">該專案尚未綁定任何監控產品</p>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  點擊上方【新增產品與特定版本套用】選取產品與指定版號
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {prjProducts.map((p) => {
+                  const binding = (prj.productBindings || []).find((b) => b.productId === p.id);
+                  const effectiveVersion = binding?.targetVersion || p.currentVersion || '未指定版本';
+
+                  return (
+                    <div
+                      key={p.id}
+                      className="bg-slate-50 border border-slate-200 rounded-2xl p-4 shadow-2xs hover:border-blue-300 transition-all space-y-3"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            {p.vendor || '通用供應商'}
+                          </span>
+                          <h4 className="text-sm font-extrabold text-slate-900">{p.name}</h4>
+                        </div>
+
+                        <div className="flex items-center space-x-1.5">
+                          <button
+                            onClick={() => {
+                              setBindProductId(p.id);
+                              setBindTargetVersion(binding?.targetVersion || '');
+                              setBindEnvironment(binding?.environment || orgDeploymentEnvironments[0] || '');
+                              setBindCustomNotes(binding?.customNotes || '');
+                              setBindingModalOpen(true);
+                            }}
+                            className="px-2.5 py-1 rounded-lg text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 flex items-center space-x-1 transition-colors"
+                            title="編輯套用版本與部署環境"
+                          >
+                            <Edit2 className="w-3.5 h-3.5 text-blue-600" />
+                            <span>編輯版本</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleRemoveProductBinding(p.id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                            title="解除專案套用"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
+                        <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                          <span className="text-[10px] text-slate-400 block font-semibold">專案特定套用版本</span>
+                          <span className="font-mono font-bold text-blue-700 text-xs">{effectiveVersion}</span>
+                        </div>
+
+                        <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                          <span className="text-[10px] text-slate-400 block font-semibold">部署環境</span>
+                          <span className="font-bold text-slate-800 text-xs">
+                            {binding?.environment || '未指定環境'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {binding?.customNotes && (
+                        <p className="text-[11px] text-slate-600 bg-white p-2 rounded-lg border border-slate-200">
+                          <span className="font-bold text-slate-500">備註:</span> {binding.customNotes}
+                        </p>
+                      )}
+
+                      <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-200/60">
+                        <span>CPE 關鍵字: {p.cpeKeyword}</span>
+                        <span>偵測漏洞: {p.detectedCveCount} 個</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* SUB TAB 3: Notifications & Frequency Settings */}
         {activeDetailSubTab === 'notifications' && (
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs space-y-6">
             <div className="border-b border-slate-200 pb-3">
@@ -1345,118 +1453,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
           </div>
         )}
 
-        {/* SUB TAB 3: Products & Target Version Bindings */}
-        {activeDetailSubTab === 'products' && (
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-900 flex items-center space-x-2">
-                  <Layers className="w-4 h-4 text-blue-600" />
-                  <span>套用到此專案之資產產品與特定版本</span>
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  可為不同專案個別指定產品的「目標套用版本號」、「部署環境」與「自訂備註」
-                </p>
-              </div>
-
-              <button
-                onClick={() => {
-                  setBindProductId(products[0]?.id || '');
-                  setBindTargetVersion(products[0]?.currentVersion || '1.0.0');
-                  setBindingModalOpen(true);
-                }}
-                className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center space-x-1.5 transition-colors shadow-2xs"
-              >
-                <Plus className="w-4 h-4" />
-                <span>新增產品與特定版本套用</span>
-              </button>
-            </div>
-
-            {prjProducts.length === 0 ? (
-              <div className="p-8 text-center text-slate-500 border border-dashed border-slate-200 rounded-2xl">
-                <Boxes className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="text-xs font-semibold text-slate-700">該專案尚未綁定任何監控產品</p>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  點擊上方【新增產品與特定版本套用】選取產品與指定版號
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {prjProducts.map((p) => {
-                  const binding = (prj.productBindings || []).find((b) => b.productId === p.id);
-                  const effectiveVersion = binding?.targetVersion || p.currentVersion || '未指定版本';
-
-                  return (
-                    <div
-                      key={p.id}
-                      className="bg-slate-50 border border-slate-200 rounded-2xl p-4 shadow-2xs hover:border-blue-300 transition-all space-y-3"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="space-y-1">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            {p.vendor || '通用供應商'}
-                          </span>
-                          <h4 className="text-sm font-extrabold text-slate-900">{p.name}</h4>
-                        </div>
-
-                        <div className="flex items-center space-x-1.5">
-                          <button
-                            onClick={() => {
-                              setBindProductId(p.id);
-                              setBindTargetVersion(binding?.targetVersion || p.currentVersion || '1.0.0');
-                              setBindEnvironment((binding?.environment as any) || 'Production');
-                              setBindCustomNotes(binding?.customNotes || '');
-                              setBindingModalOpen(true);
-                            }}
-                            className="px-2.5 py-1 rounded-lg text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 flex items-center space-x-1 transition-colors"
-                            title="編輯套用版本與部署環境"
-                          >
-                            <Edit2 className="w-3.5 h-3.5 text-blue-600" />
-                            <span>編輯版本</span>
-                          </button>
-
-                          <button
-                            onClick={() => handleRemoveProductBinding(p.id)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                            title="解除專案套用"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
-                        <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                          <span className="text-[10px] text-slate-400 block font-semibold">專案特定套用版本</span>
-                          <span className="font-mono font-bold text-blue-700 text-xs">{effectiveVersion}</span>
-                        </div>
-
-                        <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                          <span className="text-[10px] text-slate-400 block font-semibold">部署環境</span>
-                          <span className="font-bold text-slate-800 text-xs">
-                            {binding?.environment || 'Production'}
-                          </span>
-                        </div>
-                      </div>
-
-                      {binding?.customNotes && (
-                        <p className="text-[11px] text-slate-600 bg-white p-2 rounded-lg border border-slate-200">
-                          <span className="font-bold text-slate-500">備註:</span> {binding.customNotes}
-                        </p>
-                      )}
-
-                      <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-200/60">
-                        <span>CPE 關鍵字: {p.cpeKeyword}</span>
-                        <span>偵測漏洞: {p.detectedCveCount} 個</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
         {/* SUB TAB 4: Version Matrix & Upgrade Recommendations */}
         {activeDetailSubTab === 'version-matrix' && (
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs space-y-6">
@@ -1486,7 +1482,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               <div className="p-8 text-center text-slate-500 border border-dashed border-slate-200 rounded-2xl">
                 <Boxes className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                 <p className="text-xs font-semibold text-slate-700">該專案尚未綁定任何監控產品</p>
-                <p className="text-[11px] text-slate-400 mt-1">請至「3. 產品與特定版本套用」分頁新增產品並設定套用版號。</p>
+                <p className="text-[11px] text-slate-400 mt-1">請至「2. 使用產品清單」分頁新增產品並設定套用版號。</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -1907,243 +1903,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
           </div>
         )}
 
-        {/* SUB TAB 6: Project Tickets & Execution Status Log */}
-        {activeDetailSubTab === 'tickets' && (
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-900 flex items-center space-x-2">
-                  <ShieldAlert className="w-4 h-4 text-blue-600" />
-                  <span>專案修補工單與執行狀況 (待解決 / 已解決 / 已結案 / 資安豁免)</span>
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  個別紀錄專案工單執行狀況，支援標記豁免 (Waived) 並追蹤審核歷程與處置日誌
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                {/* Status Filter */}
-                <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl text-xs">
-                  <button
-                    onClick={() => setTicketFilterStatus('ALL')}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
-                      ticketFilterStatus === 'ALL'
-                        ? 'bg-white text-slate-900 shadow-2xs'
-                        : 'text-slate-500 hover:text-slate-800'
-                    }`}
-                  >
-                    全部 ({prjTickets.length})
-                  </button>
-                  <button
-                    onClick={() => setTicketFilterStatus('OPEN')}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
-                      ticketFilterStatus === 'OPEN'
-                        ? 'bg-amber-500 text-white shadow-2xs'
-                        : 'text-amber-700 hover:bg-amber-100'
-                    }`}
-                  >
-                    待解決 ({activeTicketsCount})
-                  </button>
-                  <button
-                    onClick={() => setTicketFilterStatus('RESOLVED')}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
-                      ticketFilterStatus === 'RESOLVED'
-                        ? 'bg-emerald-600 text-white shadow-2xs'
-                        : 'text-emerald-700 hover:bg-emerald-100'
-                    }`}
-                  >
-                    已解決 ({resolvedTicketsCount})
-                  </button>
-                  <button
-                    onClick={() => setTicketFilterStatus('WAIVED')}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
-                      ticketFilterStatus === 'WAIVED'
-                        ? 'bg-purple-600 text-white shadow-2xs'
-                        : 'text-purple-700 hover:bg-purple-100'
-                    }`}
-                  >
-                    已豁免 ({waivedTicketsCount})
-                  </button>
-                  <button
-                    onClick={() => setTicketFilterStatus('CLOSED')}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
-                      ticketFilterStatus === 'CLOSED'
-                        ? 'bg-slate-700 text-white shadow-2xs'
-                        : 'text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    已結案 ({closedTicketsCount})
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Filtered Tickets List */}
-            {prjTickets.length === 0 ? (
-              <div className="p-8 text-center text-slate-500 border border-dashed border-slate-200 rounded-2xl space-y-3">
-                <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
-                <p className="text-xs font-semibold text-slate-700">目前此專案尚無安全處置工單</p>
-                <p className="text-[11px] text-slate-400">點擊下方按鈕或至【產品版本與升級對照】/【專案資產弱點列表】進行指派派單</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {prjTickets
-                  .filter((t) => {
-                    if (ticketFilterStatus === 'OPEN') return t.status === 'OPEN' || t.status === 'IN_PROGRESS';
-                    if (ticketFilterStatus === 'RESOLVED') return t.status === 'RESOLVED';
-                    if (ticketFilterStatus === 'CLOSED') return t.status === 'CLOSED';
-                    if (ticketFilterStatus === 'WAIVED') return t.status === 'WAIVED';
-                    return true;
-                  })
-                  .map((t) => (
-                    <div
-                      key={t.id}
-                      className="bg-slate-50 border border-slate-200 rounded-2xl p-4 shadow-2xs hover:border-blue-300 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
-                    >
-                      <div className="space-y-1.5 flex-1">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200">
-                            {t.ticketNo}
-                          </span>
-
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              t.status === 'RESOLVED' || t.status === 'CLOSED'
-                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                : t.status === 'WAIVED'
-                                ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                                : 'bg-amber-100 text-amber-800 border border-amber-200'
-                            }`}
-                          >
-                            {t.status === 'OPEN' && '待解決 (OPEN)'}
-                            {t.status === 'IN_PROGRESS' && '處理中 (IN_PROGRESS)'}
-                            {t.status === 'RESOLVED' && '已解決 (RESOLVED)'}
-                            {t.status === 'WAIVED' && '已豁免 (WAIVED)'}
-                            {t.status === 'CLOSED' && '已結案 (CLOSED)'}
-                          </span>
-
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              t.priority === 'CRITICAL'
-                                ? 'bg-rose-100 text-rose-800'
-                                : t.priority === 'HIGH'
-                                ? 'bg-amber-100 text-amber-800'
-                                : 'bg-slate-200 text-slate-700'
-                            }`}
-                          >
-                            {t.priority}
-                          </span>
-                        </div>
-
-                        <h4
-                          onClick={() => setSelectedTicket(t)}
-                          className="text-sm font-extrabold text-slate-900 hover:text-blue-600 cursor-pointer transition-colors"
-                        >
-                          {t.title}
-                        </h4>
-
-                        <p className="text-xs text-slate-500 line-clamp-1">{t.executiveSummary}</p>
-
-                        {/* If Waived, show reason */}
-                        {t.status === 'WAIVED' && t.waiveReason && (
-                          <div className="bg-purple-50 border border-purple-200 rounded-xl p-2.5 text-xs text-purple-900 mt-2 space-y-0.5">
-                            <span className="font-bold flex items-center space-x-1">
-                              <ShieldCheck className="w-3.5 h-3.5 text-purple-700" />
-                              <span>資安豁免核准紀錄:</span>
-                            </span>
-                            <p className="text-purple-800 pl-4">{t.waiveReason}</p>
-                            <p className="text-[10px] text-purple-600 pl-4">
-                              審核者: {t.waivedBy || '安全委員會'} | 核准時間: {t.waivedAt ? new Date(t.waivedAt).toLocaleString() : '最近'}
-                            </p>
-                          </div>
-                        )}
-                        {(t.status === 'RESOLVED' || t.status === 'CLOSED') && t.resolutionNote && (
-                          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 text-xs text-emerald-900 mt-2">
-                            <span className="font-bold">處理說明：</span> {t.resolutionNote}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Ticket Action Status Switcher */}
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 shrink-0 border-t md:border-t-0 md:border-l border-slate-200 pt-3 md:pt-0 md:pl-4">
-                        <div className="space-y-1">
-                          <span className="text-[10px] text-slate-400 font-semibold block">設定執行狀況:</span>
-                          <div className="flex items-center space-x-1">
-                            <button
-                              onClick={() => handleUpdateTicketStatus(t.id, 'OPEN')}
-                              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                                t.status === 'OPEN' || t.status === 'IN_PROGRESS'
-                                  ? 'bg-amber-600 text-white shadow-xs'
-                                  : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-                              }`}
-                            >
-                              待解決
-                            </button>
-
-                            <button
-                              onClick={() => handleUpdateTicketStatus(t.id, 'RESOLVED')}
-                              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                                t.status === 'RESOLVED' || t.status === 'CLOSED'
-                                  ? 'bg-emerald-600 text-white shadow-xs'
-                                  : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-                              }`}
-                            >
-                              已解決
-                            </button>
-
-                            <button
-                              onClick={() => handleUpdateTicketStatus(t.id, 'CLOSED')}
-                              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${t.status === 'CLOSED' ? 'bg-slate-700 text-white shadow-xs' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}
-                            >
-                              {t.status === 'CLOSED' ? '已結案' : '結案'}
-                            </button>
-
-                            <button
-                              onClick={() => {
-                                setWaivingTicket(t);
-                                setWaiveReasonInput(t.waiveReason || '');
-                                setWaivedByInput(t.waivedBy || '專案資安長');
-                              }}
-                              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                                t.status === 'WAIVED'
-                                  ? 'bg-purple-600 text-white shadow-xs'
-                                  : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
-                              }`}
-                            >
-                              申請豁免
-                            </button>
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => setSelectedTicket(t)}
-                          className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center space-x-1"
-                        >
-                          <FileText className="w-3.5 h-3.5 text-blue-600" />
-                          <span>詳細情報</span>
-                        </button>
-                        <button
-                          onClick={() => setEditingTicket({ ...t })}
-                          className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs flex items-center space-x-1 border border-blue-200"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                          <span>編輯</span>
-                        </button>
-                        <button
-                          onClick={() => handleDeleteTicket(t)}
-                          className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs flex items-center space-x-1 border border-rose-200"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>刪除</span>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Resolve Ticket Modal */}
         {resolvingTicket && (
           <div className="fixed inset-0 z-70 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-md overflow-y-auto">
@@ -2327,12 +2086,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   <select
                     value={bindProductId}
                     onChange={(e) => {
-                      const pid = e.target.value;
-                      setBindProductId(pid);
-                      const selectedProd = products.find((p) => p.id === pid);
-                      if (selectedProd) {
-                        setBindTargetVersion(selectedProd.currentVersion || '1.0.0');
-                      }
+                      setBindProductId(e.target.value);
                     }}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
                   >
@@ -2350,13 +2104,14 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   </label>
                   <input
                     type="text"
+                    required
                     value={bindTargetVersion}
                     onChange={(e) => setBindTargetVersion(e.target.value)}
-                    placeholder="例：6.5.0-generic 或 3.0.12"
+                    placeholder="必填，例：6.5.0-generic 或 3.0.12"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
                   />
                   <p className="text-[10px] text-slate-400 mt-1">
-                    獨立設定此專案在生產/測試環境所實施之明確套件版號。
+                    獨立設定此專案在生產/測試環境所實施之明確套件版號，此欄位為必填。
                   </p>
                 </div>
 
@@ -2367,11 +2122,16 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     onChange={(e: any) => setBindEnvironment(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
                   >
-                    <option value="Production">Production (正式營運環境)</option>
-                    <option value="Staging">Staging (預發布環境)</option>
-                    <option value="Testing">Testing (測試環境)</option>
-                    <option value="Development">Development (開發環境)</option>
+                    {!bindEnvironment && <option value="">請選擇部署環境</option>}
+                    {environmentOptions.map((env) => (
+                      <option key={env} value={env}>
+                        {env}
+                      </option>
+                    ))}
                   </select>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    可於「系統管理與設定中心 → 組織清單管理」新增自訂部署環境。
+                  </p>
                 </div>
 
                 <div>
@@ -2698,30 +2458,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   </div>
                 </div>
 
-                {/* Project Teams notification recipients */}
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-3">
-                  <span className="font-bold text-slate-800 block text-xs">Teams 通知對象設定</span>
-
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">負責人 Teams Webhook URL</label>
-                    <input
-                      type="url"
-                      value={formTeamsWebhookUrl}
-                      onChange={(e) => setFormTeamsWebhookUrl(e.target.value)}
-                      placeholder="https://company.webhook.office.com/webhookb2/..."
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-blue-600"
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <label className="block font-semibold text-slate-700">處理人姓名
-                      <input type="text" value={formHandlerName} onChange={(e) => setFormHandlerName(e.target.value)} className="mt-1 w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900" />
-                    </label>
-                    <label className="block font-semibold text-slate-700">處理人 Teams Webhook URL
-                      <input type="url" value={formHandlerTeamsWebhookUrl} onChange={(e) => setFormHandlerTeamsWebhookUrl(e.target.value)} placeholder="https://...logic.azure.com/..." className="mt-1 w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono text-slate-900" />
-                    </label>
-                  </div>
-                </div>
-
                 <div className="flex justify-end space-x-2 pt-3 border-t border-slate-200">
                   <button
                     type="button"
@@ -2775,50 +2511,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
         </div>
       </div>
 
-      {/* Summary KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
-          <div className="text-xs text-slate-500 font-semibold mb-1 flex items-center justify-between">
-            <span>納管專案總數</span>
-            <FolderKanban className="w-4 h-4 text-blue-600" />
-          </div>
-          <div className="text-2xl font-black text-slate-900">{projects.length} 個專案</div>
-          <p className="text-[11px] text-slate-400 mt-1">涵蓋 {departments.length} 個事業群部門</p>
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
-          <div className="text-xs text-slate-500 font-semibold mb-1 flex items-center justify-between">
-            <span>產品套用綁定總數</span>
-            <Layers className="w-4 h-4 text-indigo-600" />
-          </div>
-          <div className="text-2xl font-black text-indigo-600">
-            {projects.reduce((sum, p) => sum + (p.productIds?.length || 0), 0)} 次套用
-          </div>
-          <p className="text-[11px] text-slate-400 mt-1">具備獨立特定版本號套用</p>
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
-          <div className="text-xs text-slate-500 font-semibold mb-1 flex items-center justify-between">
-            <span>即時觸發通報專案</span>
-            <Zap className="w-4 h-4 text-emerald-600" />
-          </div>
-          <div className="text-2xl font-black text-emerald-600">
-            {projects.filter((p) => !p.notifyFrequency || p.notifyFrequency === 'REALTIME').length} 個專案
-          </div>
-          <p className="text-[11px] text-slate-400 mt-1">發現高危漏洞當下立即推送</p>
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
-          <div className="text-xs text-slate-500 font-semibold mb-1 flex items-center justify-between">
-            <span>Teams 頻道串接率</span>
-            <MessageSquare className="w-4 h-4 text-purple-600" />
-          </div>
-          <div className="text-2xl font-black text-purple-700">
-            {projects.filter((p) => Boolean(p.teamsWebhookUrl)).length} / {projects.length}
-          </div>
-          <p className="text-[11px] text-slate-400 mt-1">已設定專屬 Teams Webhook</p>
-        </div>
-      </div>
 
       {/* Filter and Search Bar */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -3118,22 +2810,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     </select>
                   </div>
 
-                </div>
-              </div>
-
-              {/* Project Teams notification recipients */}
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-3">
-                <span className="font-bold text-slate-800 block text-xs">Teams 通知對象設定</span>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Microsoft Teams Webhook URL</label>
-                  <input
-                    type="url"
-                    value={formTeamsWebhookUrl}
-                    onChange={(e) => setFormTeamsWebhookUrl(e.target.value)}
-                    placeholder="https://company.webhook.office.com/webhookb2/..."
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-blue-600"
-                  />
                 </div>
               </div>
 

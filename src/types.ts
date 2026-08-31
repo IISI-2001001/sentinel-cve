@@ -122,7 +122,7 @@ export interface ProjectProductBinding {
   vendor?: string;
   cpeKeyword?: string;
   targetVersion: string; // 特定套用版本號
-  environment?: 'Production' | 'Staging' | 'Testing' | 'Development';
+  environment?: string;
   customNotes?: string;
   boundAt?: string;
 }

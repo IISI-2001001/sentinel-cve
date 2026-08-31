@@ -11,13 +11,17 @@ import {
   Server,
   CheckCircle,
   AlertCircle,
+  FolderKanban,
+  Layers,
+  MessageSquare,
 } from 'lucide-react';
-import { MonitoredProduct, CVEItem, AlertNotification } from '../types';
+import { MonitoredProduct, CVEItem, AlertNotification, Project } from '../types';
 
 interface DashboardProps {
   products: MonitoredProduct[];
   cves: CVEItem[];
   notifications: AlertNotification[];
+  projects: Project[];
   isScanning: boolean;
   onTriggerScan: () => void;
   onSelectCve: (cveId: string) => void;
@@ -28,6 +32,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   products,
   cves,
   notifications,
+  projects,
   isScanning,
   onTriggerScan,
   onSelectCve,
@@ -40,6 +45,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const lowCount = cves.filter((c) => c.cvss.severity === 'LOW').length;
   const cisaKevCount = cves.filter((c) => c.cisaKev).length;
   const totalCves = cves.length;
+  const projectDepartments = Array.from(new Set(projects.map((p) => p.department || '未分類')));
 
   const getProductStatus = (product: MonitoredProduct) => {
     const alertCount = activeAlerts.filter((alert) => alert.productName.toLowerCase() === product.name.toLowerCase()).length;
@@ -72,6 +78,68 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <p className="text-slate-200 text-sm max-w-2xl leading-relaxed">
               SentinelCVE 自動追蹤科技堆棧資產、整合 NIST NVD v2.0 與 CISA KEV 官方資料庫，提供弱點比對、風險提醒與通報流程追蹤。
             </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <h2 className="text-sm font-bold text-slate-700 flex items-center space-x-2">
+          <FolderKanban className="w-4 h-4 text-blue-600" />
+          <span>專案管理總覽指標</span>
+        </h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div
+            onClick={() => onNavigateTab('projects')}
+            className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:border-blue-400 hover:shadow-md transition-all cursor-pointer"
+          >
+            <div className="text-xs text-slate-500 font-semibold mb-1 flex items-center justify-between">
+              <span>納管專案總數</span>
+              <FolderKanban className="w-4 h-4 text-blue-600" />
+            </div>
+            <div className="text-2xl font-black text-slate-900">{projects.length} 個專案</div>
+            <p className="text-[11px] text-slate-400 mt-1">涵蓋 {projectDepartments.length} 個事業群部門</p>
+          </div>
+
+          <div
+            onClick={() => onNavigateTab('projects')}
+            className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:border-indigo-400 hover:shadow-md transition-all cursor-pointer"
+          >
+            <div className="text-xs text-slate-500 font-semibold mb-1 flex items-center justify-between">
+              <span>產品套用綁定總數</span>
+              <Layers className="w-4 h-4 text-indigo-600" />
+            </div>
+            <div className="text-2xl font-black text-indigo-600">
+              {projects.reduce((sum, p) => sum + (p.productIds?.length || 0), 0)} 次套用
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">具備獨立特定版本號套用</p>
+          </div>
+
+          <div
+            onClick={() => onNavigateTab('projects')}
+            className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:border-emerald-400 hover:shadow-md transition-all cursor-pointer"
+          >
+            <div className="text-xs text-slate-500 font-semibold mb-1 flex items-center justify-between">
+              <span>即時觸發通報專案</span>
+              <Zap className="w-4 h-4 text-emerald-600" />
+            </div>
+            <div className="text-2xl font-black text-emerald-600">
+              {projects.filter((p) => !p.notifyFrequency || p.notifyFrequency === 'REALTIME').length} 個專案
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">發現高危漏洞當下立即推送</p>
+          </div>
+
+          <div
+            onClick={() => onNavigateTab('projects')}
+            className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:border-purple-400 hover:shadow-md transition-all cursor-pointer"
+          >
+            <div className="text-xs text-slate-500 font-semibold mb-1 flex items-center justify-between">
+              <span>Teams 頻道串接率</span>
+              <MessageSquare className="w-4 h-4 text-purple-600" />
+            </div>
+            <div className="text-2xl font-black text-purple-700">
+              {projects.filter((p) => Boolean(p.teamsWebhookUrl)).length} / {projects.length}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">已設定專屬 Teams Webhook</p>
           </div>
         </div>
       </div>
