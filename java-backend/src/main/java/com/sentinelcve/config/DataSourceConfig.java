@@ -11,7 +11,10 @@ import java.net.URI;
 import java.net.URISyntaxException;
 
 /**
- * Builds the PostgreSQL DataSource. Mirrors src/server/db.ts: prefers a single DATABASE_URL
+ * Builds the PostgreSQL DataSource. Resolution order: (1) config/db.properties local override
+ * file (see DbConfigFileStore), written by the 系統管理 &gt; 資料庫連線 UI, always wins over the
+ * environment so an administrator can change the connection without touching docker-compose.yml;
+ * (2) a single DATABASE_URL env var
  * (postgres://user:pass@host:port/db, as produced by docker-compose), falling back to
  * discrete PGHOST/PGPORT/PGUSER/PGPASSWORD/PGDATABASE env vars, then finally to localhost
  * defaults for local development.
@@ -46,9 +49,14 @@ public class DataSourceConfig {
         String user;
         String password;
 
-        if (databaseUrl != null && !databaseUrl.isBlank()) {
+        String effectiveUrl = DbConfigFileStore.readDatabaseUrl();
+        if (effectiveUrl == null || effectiveUrl.isBlank()) {
+            effectiveUrl = databaseUrl;
+        }
+
+        if (effectiveUrl != null && !effectiveUrl.isBlank()) {
             // postgres://user:password@host:port/database
-            URI uri = new URI(databaseUrl.replaceFirst("^postgres(ql)?://", "postgresql://"));
+            URI uri = new URI(effectiveUrl.replaceFirst("^postgres(ql)?://", "postgresql://"));
             String userInfo = uri.getUserInfo();
             user = userInfo != null ? userInfo.split(":", 2)[0] : pgUser;
             password = userInfo != null && userInfo.contains(":") ? userInfo.split(":", 2)[1] : pgPassword;

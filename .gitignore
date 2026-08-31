@@ -13,3 +13,4 @@ coverage/
 *.key
 .vagrant/
 sentinel-cve-db/
+java-backend/config/

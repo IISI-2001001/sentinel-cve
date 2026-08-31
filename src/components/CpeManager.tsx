@@ -30,6 +30,7 @@ export const CpeManager: React.FC = () => {
   // Refresh-from-NVD form
   const [queryName, setQueryName] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [checkingAll, setCheckingAll] = useState(false);
 
   // Manual add/edit modal state
   const [editing, setEditing] = useState<CpeCacheEntry | null>(null);
@@ -76,6 +77,35 @@ export const CpeManager: React.FC = () => {
       setError(err.message || 'NVD 查詢失敗');
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  /** Re-checks every already-saved product against NVD for newly published CPE identities and
+   * updates the cache for any that changed. This is the same function the "自動排程設定 > CPE
+   * 對照自動更新排程" schedule calls automatically — this button just runs it on demand. */
+  const handleCheckAllForNewCpe = async () => {
+    setCheckingAll(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch('/api/cpe-cache/refresh-all', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `檢查失敗 (HTTP ${res.status})`);
+      const updatedCount = data.updatedProducts?.length ?? 0;
+      const updatedNames = (data.updatedProducts || []).map((u: any) => u.productName).join('、');
+      setNotice(
+        updatedCount > 0
+          ? `已檢查 ${data.checkedCount ?? 0} 項產品，其中 ${updatedCount} 項發現新 CPE：${updatedNames}`
+          : `已檢查 ${data.checkedCount ?? 0} 項產品，皆無新增的 CPE。`
+      );
+      if (data.errors?.length) {
+        setError(`${data.errors.length} 項產品查詢失敗：${data.errors.map((e: any) => e.productName).join('、')}`);
+      }
+      await loadEntries();
+    } catch (err: any) {
+      setError(err.message || '檢查所有產品 CPE 失敗');
+    } finally {
+      setCheckingAll(false);
     }
   };
 
@@ -197,6 +227,28 @@ export const CpeManager: React.FC = () => {
         <p className="text-[11px] text-slate-500">
           會呼叫 NVD CPE Dictionary API（cpeMatchString 萬用查詢），依 vendor:product 去重複後，將版本欄位改為萬用字元「*」儲存，供專案資產關聯與弱點比對流程使用。
         </p>
+      </div>
+
+      {/* Check all cached products for newly published CPEs (same function as the schedule) */}
+      <div className="p-4 rounded-2xl bg-indigo-50/60 border border-indigo-200 flex items-center justify-between gap-3">
+        <div className="space-y-0.5">
+          <div className="text-xs font-bold text-indigo-900 uppercase flex items-center space-x-1.5">
+            <RefreshCw className="w-3.5 h-3.5 text-indigo-600" />
+            <span>批次檢查已儲存產品的新 CPE</span>
+          </div>
+          <p className="text-[11px] text-indigo-800">
+            對下方清單中「所有」已儲存的產品逐一向 NVD 重新查詢，若發現新的 CPE 對照則自動更新快取（與「自動排程設定」頁面的 CPE 自動更新排程呼叫相同邏輯）。
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={checkingAll || entries.length === 0}
+          onClick={handleCheckAllForNewCpe}
+          className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center space-x-1.5 shadow-sm transition-all disabled:opacity-50 shrink-0"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${checkingAll ? 'animate-spin' : ''}`} />
+          <span>{checkingAll ? '檢查中...' : '確認所有產品是否有新 CPE'}</span>
+        </button>
       </div>
 
       {/* Cached entries list */}

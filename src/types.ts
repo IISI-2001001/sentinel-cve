@@ -209,6 +209,12 @@ export interface ScheduleConfig {
   autoNotifyEmail: boolean;
   lastRunAt?: string;
   nextRunAt?: string;
+  // CPE 對照自動更新排程：獨立於上方的弱點掃描排程，定期檢查「產品管理」頁面已儲存
+  // 的每個產品是否有新的 NVD CPE 識別碼。
+  cpeAutoUpdateEnabled?: boolean;
+  cpeUpdateIntervalMinutes?: number; // e.g. 360, 720, 1440
+  cpeLastRunAt?: string;
+  cpeNextRunAt?: string;
 }
 
 export interface TeamsNotificationConfig {

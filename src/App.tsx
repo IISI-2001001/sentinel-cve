@@ -15,16 +15,17 @@ import {
   Project,
   EmailNotificationConfig,
 } from './types';
-import {
-  INITIAL_PRODUCTS,
-  INITIAL_CVES,
-  INITIAL_RULES,
-  INITIAL_NOTIFICATIONS,
-  INITIAL_WEBHOOKS,
-  INITIAL_LOGS,
-  INITIAL_PROJECTS,
-  INITIAL_EMAIL_CONFIG,
-} from './data/initialData';
+
+const EMPTY_EMAIL_CONFIG: EmailNotificationConfig = {
+  smtpServer: '',
+  smtpPort: 587,
+  senderName: '',
+  senderEmail: '',
+  enableAuth: false,
+  username: '',
+  password: '',
+  defaultRecipients: [],
+};
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -32,18 +33,19 @@ export default function App() {
     'schedule' | 'teams-notification' | 'logs' | 'email-smtp' | 'cpe-management'
   >('schedule');
 
-  const [products, setProducts] = useState<MonitoredProduct[]>(INITIAL_PRODUCTS);
-  const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
-  const [emailConfig, setEmailConfig] = useState<EmailNotificationConfig>(INITIAL_EMAIL_CONFIG);
-  const [cves, setCves] = useState<CVEItem[]>(INITIAL_CVES);
-  const [notifications, setNotifications] = useState<AlertNotification[]>(INITIAL_NOTIFICATIONS);
-  const [rules, setRules] = useState<AlertRule[]>(INITIAL_RULES);
-  const [webhooks, setWebhooks] = useState<WebhookConfig[]>(INITIAL_WEBHOOKS);
-  const [logs, setLogs] = useState<ScanLog[]>(INITIAL_LOGS);
+  const [products, setProducts] = useState<MonitoredProduct[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [emailConfig, setEmailConfig] = useState<EmailNotificationConfig>(EMPTY_EMAIL_CONFIG);
+  const [cves, setCves] = useState<CVEItem[]>([]);
+  const [notifications, setNotifications] = useState<AlertNotification[]>([]);
+  const [rules, setRules] = useState<AlertRule[]>([]);
+  const [webhooks, setWebhooks] = useState<WebhookConfig[]>([]);
+  const [logs, setLogs] = useState<ScanLog[]>([]);
 
   const [selectedCveId, setSelectedCveId] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [operationNotice, setOperationNotice] = useState<{ success: boolean; message: string } | null>(null);
+  const [dbConnected, setDbConnected] = useState<boolean>(true);
 
   const showOperationNotice = (success: boolean, message: string) => {
     setOperationNotice({ success, message });
@@ -57,16 +59,22 @@ export default function App() {
   };
 
   const reloadServerData = async () => {
+    const fetchJson = async (url: string) => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status} (${url})`);
+      return res.json();
+    };
+
     try {
       const [resProd, resPrj, resEmail, resCve, resNotif, resRule, resWh, resLogs] = await Promise.all([
-        fetch('/api/products').then((r) => r.json()),
-        fetch('/api/projects').then((r) => r.json()),
-        fetch('/api/email/config').then((r) => r.json()),
-        fetch('/api/cves').then((r) => r.json()),
-        fetch('/api/alerts').then((r) => r.json()),
-        fetch('/api/rules').then((r) => r.json()),
-        fetch('/api/webhooks').then((r) => r.json()),
-        fetch('/api/logs').then((r) => r.json()),
+        fetchJson('/api/products'),
+        fetchJson('/api/projects'),
+        fetchJson('/api/email/config'),
+        fetchJson('/api/cves'),
+        fetchJson('/api/alerts'),
+        fetchJson('/api/rules'),
+        fetchJson('/api/webhooks'),
+        fetchJson('/api/logs'),
       ]);
 
       if (Array.isArray(resProd)) setProducts(resProd);
@@ -77,8 +85,10 @@ export default function App() {
       if (Array.isArray(resRule)) setRules(resRule);
       if (Array.isArray(resWh)) setWebhooks(resWh);
       if (Array.isArray(resLogs)) setLogs(resLogs);
+      setDbConnected(true);
     } catch (err) {
-      console.warn('Backend API connection warning, using local state:', err);
+      console.warn('Backend API connection failed:', err);
+      setDbConnected(false);
     }
   };
 
@@ -136,6 +146,15 @@ export default function App() {
           onAcknowledgeAlert={handleAcknowledgeAlert}
           onSelectCve={(cveId) => setSelectedCveId(cveId)}
         />
+
+        {!dbConnected && (
+          <div
+            role="alert"
+            className="mx-4 mt-3 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800"
+          >
+            ⚠️ 無法連線至後端資料庫，目前顯示的資料可能不完整或為空。請確認後端服務與 PostgreSQL 連線狀態。
+          </div>
+        )}
 
         {operationNotice && (
           <div

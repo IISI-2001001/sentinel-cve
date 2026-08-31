@@ -60,7 +60,12 @@ public class ScheduleConfigController {
             if (hasText(request.get("scanScope"))) state.scheduleConfig.setScanScope(asString(request.get("scanScope")));
             if (request.containsKey("autoNotifyTeams")) state.scheduleConfig.setAutoNotifyTeams(jsBoolean(request.get("autoNotifyTeams")));
             if (request.containsKey("autoNotifyEmail")) state.scheduleConfig.setAutoNotifyEmail(jsBoolean(request.get("autoNotifyEmail")));
+            if (request.containsKey("cpeAutoUpdateEnabled")) state.scheduleConfig.setCpeAutoUpdateEnabled(jsBoolean(request.get("cpeAutoUpdateEnabled")));
+            if (request.containsKey("cpeUpdateIntervalMinutes")) state.scheduleConfig.setCpeUpdateIntervalMinutes((int) toNumber(request.get("cpeUpdateIntervalMinutes")));
             state.scheduleConfig.setNextRunAt(Instant.ofEpochMilli(System.currentTimeMillis() + state.scheduleConfig.getIntervalMinutes() * 60_000L).toString());
+            if (state.scheduleConfig.getCpeUpdateIntervalMinutes() > 0) {
+                state.scheduleConfig.setCpeNextRunAt(Instant.ofEpochMilli(System.currentTimeMillis() + state.scheduleConfig.getCpeUpdateIntervalMinutes() * 60_000L).toString());
+            }
             response = state.scheduleConfig;
         }
 

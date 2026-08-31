@@ -2,6 +2,7 @@ package com.sentinelcve.controller;
 
 import com.sentinelcve.db.PersistenceRepository;
 import com.sentinelcve.provider.ProductProviderService;
+import com.sentinelcve.service.CpeCacheService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,11 +29,14 @@ public class CpeCacheController {
 
     private final PersistenceRepository persistenceRepository;
     private final ProductProviderService productProviderService;
+    private final CpeCacheService cpeCacheService;
 
     public CpeCacheController(PersistenceRepository persistenceRepository,
-                               ProductProviderService productProviderService) {
+                               ProductProviderService productProviderService,
+                               CpeCacheService cpeCacheService) {
         this.persistenceRepository = persistenceRepository;
         this.productProviderService = productProviderService;
+        this.cpeCacheService = cpeCacheService;
     }
 
     @GetMapping
@@ -54,6 +58,18 @@ public class CpeCacheController {
         } catch (Exception err) {
             return ResponseEntity.status(502).body(error(err.getMessage() != null ? err.getMessage() : "NVD CPE 查詢失敗"));
         }
+    }
+
+    /**
+     * Re-checks every cached product against NVD and updates any entry that has a newly
+     * published CPE identity. This is the exact function invoked by the CPE auto-update
+     * schedule (see SchedulerService); this endpoint just lets an admin run it on demand from
+     * the "產品管理" page.
+     */
+    @PostMapping("/refresh-all")
+    public ResponseEntity<?> refreshAll() {
+        CpeCacheService.RefreshAllResult result = cpeCacheService.refreshAllCachedCpe("手動觸發");
+        return ResponseEntity.ok(result);
     }
 
     /** Manually creates/overwrites a cache entry with a hand-curated candidate list (no NVD call). */

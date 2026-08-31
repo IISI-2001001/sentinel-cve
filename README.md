@@ -21,7 +21,6 @@
    - [使用 Docker CLI 手動建置與執行](#3-使用-docker-cli-手動建置與執行)
    - [完整容器重建與更新流程 (Rebuild Workflow)](#4-完整容器重建與更新流程-rebuild-workflow)
    - [日誌查看與健康檢查 (Logs & Health check)](#5-日誌查看與健康檢查-logs--health-check)
-6. [Vagrant VM 部署 (本機/測試用虛擬機)](#-vagrant-vm-部署-本機測試用虛擬機)
 
 ---
 
@@ -30,11 +29,13 @@
 * **四大多維度管控頁面**：
   * **總覽儀表板 (Dashboard)**：全站受監控資產、警報數量、CISA KEV 警告、CVSS 分數統計圖表與即時 Feed 檢視。
   * **專案管理與工單中心 (Project Manager)**：專案團隊維護、產品版本與升級對照表 (Upgrade Matrix)、資安處置工單看板。
-  * **系統管理與設定中心 (System Manager)**：集中管理「⏱️ 自動排程」、「📦 監控資產產品 (.txt/CPE 批次匯入)」、「📇 CPE 對照管理」、「🔑 NVD API Key 管理」、「✉️ 全域 Email SMTP」、「💬 MS Teams Webhook 通報」與「📋 系統稽核日誌」。
+  * **系統管理與設定中心 (System Manager)**：集中管理「⏱️ 自動排程」、「📦 監控資產產品 (.txt/CPE 批次匯入)」、「📇 CPE 對照管理」、「🏢 組織清單管理」、「🔑 NVD API Key 管理」、「🗄️ 資料庫連線管理」、「✉️ 全域 Email SMTP」、「💬 MS Teams Webhook 通報」與「📋 系統稽核日誌」。
   * **系統說明與專業名詞手冊 (Documentation)**：完整收錄 CVE/CPE/CVSS 名詞解釋、NVD/CISA KEV/OSV/EPSS 權威數據源說明、4 種弱點查找與派單 SOP、自動化聯防管道與 FAQ。
 * **NVD CPE 對照引擎**：
   * 依產品名稱自動向 NVD CPE Dictionary 查詢並快取對應的 vendor:product CPE 識別碼（版本以萬用字元表示），供資產版本比對使用。
   * 可設定 NVD API Key 以提升呼叫速率上限（無 Key 約 5 requests/30s，有 Key 約 50 requests/30s），未設定時以匿名方式呼叫。
+  * 支援獨立的 **CPE 對照自動更新排程**（於「系統管理 > ⏱️ 自動排程」設定間隔），定期重新查詢已快取產品是否有新發布的 CPE 識別碼；亦可於「產品管理」頁面手動觸發「確認所有產品是否有新 CPE」立即檢查。
+* **組織清單管理**：於「系統管理 > 🏢 組織清單管理」維護「所屬部門」與「專案經理」名單，「專案管理」的新增/編輯專案表單即可以下拉選單方式選取，避免手動輸入造成的名稱不一致。
 * **自動閉環聯防與告警**：
   * 支援排程定時自動比對資產、自動生成資安處置工單。
   * 即時發送具備 MessageCard 格式之 MS Teams Webhook 通知與企業 Email 派報。
@@ -79,9 +80,11 @@ SentinelCVE 採用 **Full-Stack (Java 21/Spring Boot 3 + React/Vite)** 一體化
   * `Navbar.tsx`：頂部導覽列，提供 4 大頁面切換、即時全站掃描按鈕與未讀警報通知 Dropdown。
   * `Dashboard.tsx`：總覽儀表板，提供核心 KPI 數據、風險指數圓餅圖與最新監控 Feed。
   * `ProjectManager.tsx`：專案管理、產品升級版本矩陣對照表、處置工單 Kanban 看板。
-  * `SystemManager.tsx`：系統整合管理大廳，收納排程設定、監控資產產品、CPE 對照管理、NVD API Key 管理、SMTP 郵件伺服器、Teams Webhook 與稽核日誌。
-  * `CpeManager.tsx` (嵌入於 SystemManager)：管理 `product_cpe_cache` 資料表，可從 NVD 重新查詢/刷新、手動新增編輯或刪除各產品對應的 CPE 識別碼。
+  * `SystemManager.tsx`：系統整合管理大廳，收納排程設定、監控資產產品、CPE 對照管理、組織清單管理、NVD API Key 管理、資料庫連線管理、SMTP 郵件伺服器、Teams Webhook 與稽核日誌。
+  * `CpeManager.tsx` (嵌入於 SystemManager)：管理 `product_cpe_cache` 資料表，可從 NVD 重新查詢/刷新、手動新增編輯或刪除各產品對應的 CPE 識別碼，並可一鍵批次檢查所有已儲存產品是否有新發布的 CPE。
+  * `OrgDirectoryManager.tsx` (嵌入於 SystemManager)：維護「所屬部門」與「專案經理」清單，供「專案管理」新增/編輯專案表單以下拉選單方式選取。
   * `NvdApiKeyManager.tsx` (嵌入於 SystemManager)：設定並測試呼叫 NVD REST API 用的 API Key。
+  * `DbConnectionManager.tsx` (嵌入於 SystemManager)：設定/測試後端連線的 PostgreSQL 主機資訊，設定值寫入後端本機檔案，優先於環境變數，儲存後需重新啟動後端服務。
   * `SystemLogs.tsx` (嵌入於 SystemManager)：系統操作與排程稽核軌跡 Audit Log。
   * `Documentation.tsx`：完整系統文件與互動式專業名詞對照。
   * `CveDetailModal.tsx` / `TicketDetailModal.tsx`：CVE 漏洞威脅剖析與工單詳細內容與 Email 測試發送 Modal。
@@ -90,8 +93,8 @@ SentinelCVE 採用 **Full-Stack (Java 21/Spring Boot 3 + React/Vite)** 一體化
 
 * **核心技術**：Java 21, Spring Boot 3 (Web / JDBC / Async / Scheduling), Maven, **PostgreSQL 16 (`postgresql` JDBC driver + HikariCP)**。
 * **模組劃分 (`java-backend/src/main/java/com/sentinelcve/`)**：
-  * `controller/*`：REST API endpoints（`/api/dashboard/stats`, `/api/cves`, `/api/products`, `/api/projects`, `/api/tickets`, `/api/schedule/*`, `/api/system/*`, `/api/cpe-cache/*`, `/api/nvd/*` 等）。
-  * `service/*`：核心業務邏輯，包含 `ScanService`（NVD/OSV 檢索與版本比對）、`ProductProviderService`（NVD CPE 查詢）、`MailService`（動態 SMTP 寄信）、`WebhookDispatchService`（Teams/Slack/自訂 Webhook）、`AlertRuleEngineService`（告警規則引擎）、`SchedulerService`（`@Scheduled` 背景排程）、`ProjectDigestService`（專案摘要通知）。
+  * `controller/*`：REST API endpoints（`/api/dashboard/stats`, `/api/cves`, `/api/products`, `/api/projects`, `/api/tickets`, `/api/schedule/*`, `/api/system/*`, `/api/system/db-config`, `/api/cpe-cache/*`, `/api/nvd/*`, `/api/org-directory/*` 等）。
+  * `service/*`：核心業務邏輯，包含 `ScanService`（NVD/OSV 檢索與版本比對）、`ProductProviderService`（NVD CPE 查詢）、`CpeCacheService`（批次檢查已快取產品是否有新發布 CPE，供手動觸發與排程共用）、`MailService`（動態 SMTP 寄信）、`WebhookDispatchService`（Teams/Slack/自訂 Webhook）、`AlertRuleEngineService`（告警規則引擎）、`SchedulerService`（`@Scheduled` 背景排程，含掃描排程與 CPE 對照自動更新排程）、`ProjectDigestService`（專案摘要通知）。
   * `db/PersistenceRepository.java` + `config/DataSourceConfig.java`：應用程式狀態（監控產品、CVE 資料庫、警報規則、通知、Webhook、稽核日誌、專案、工單、CPE 快取、NVD/Email/Teams/排程設定）全部以 PostgreSQL 儲存，每個集合對應一張資料表，主要欄位另外抽出做索引（如 `severity`、`cisa_kev`、`status`），完整物件則存於 `data JSONB` 欄位（透過 `PGobject` 序列化），服務啟動時整批載入記憶體、每次異動即以 `@Async` 方式整批寫回資料庫（Transaction 包裹，確保一致性）。
   * `model/*`：與前端 `src/types.ts` 對應之 Java Model（Jackson camelCase 序列化）。
 
@@ -101,6 +104,7 @@ SentinelCVE 採用 **Full-Stack (Java 21/Spring Boot 3 + React/Vite)** 一體化
   * `SchedulerService` 以 Spring 的 `@Scheduled(fixedDelay = 30000)` 註解實作，每 30 秒執行一次背景輪詢。
   * **全域系統自動排程**：可在「系統管理 > ⏱️ 自動排程」頁面靈活調整全域掃描週期（**15 分鐘、30 分鐘、1 小時、6 小時、24 小時**）與掃描資產範疇（全部資產 / 僅限 Critical & High）。
   * **個別產品獨立週期**：亦可在「系統管理 > 📦 監控資產產品」設定個別產品的 `scanIntervalMinutes`（預設 30 分鐘）。
+  * **CPE 對照自動更新排程**：獨立於上述弱點掃描排程，可在「系統管理 > ⏱️ 自動排程」另外設定間隔（如 6 小時、12 小時、24 小時），定期重新向 NVD 查詢已快取產品是否有新發布的 CPE 識別碼並自動更新快取；同一邏輯也可在「產品管理」頁面以「確認所有產品是否有新 CPE」按鈕手動觸發。
   * **自動告警與派報**：每當達到排程時間，背景 Worker 會自動調用 NVD/OSV API 發起弱點檢索；若比對到符合條件的高危漏洞（如 CVSS $\ge$ 7.0），將自動觸發 Teams Webhook 即時推播、發送 Email 通知，並寫入系統 Audit Log。
 
 ---
@@ -126,6 +130,8 @@ POSTGRES_USER="sentinel"
 POSTGRES_PASSWORD="sentinel"
 POSTGRES_DB="sentinel_cve"
 ```
+
+> 💡 也可以在啟動後改由「系統管理 > 🗄️ 資料庫連線管理」頁面設定/切換 PostgreSQL 連線，設定值會寫入後端本機檔案 `java-backend/config/db.properties`（Docker 部署時建議掛載為具名 volume 以持久化），其優先權高於 `DATABASE_URL` 環境變數；儲存後需重新啟動後端服務（或 `docker compose restart sentinel-cve`）才會套用。
 
 ---
 
@@ -296,42 +302,3 @@ docker inspect --format='{{json .State.Health}}' sentinel-cve-app
 curl -I http://localhost:3000/api/health
 ```
 若回傳 `HTTP/1.1 200 OK` 且包含 `{"status":"ok"}` 即代表服務正常運作！
-
----
-
-## 🖥️ Vagrant VM 部署 (本機/測試用虛擬機)
-
-本專案根目錄提供 `Vagrantfile`，可在 VirtualBox 虛擬機（Rocky Linux 9）中自動安裝 Docker 並以 `docker compose` 啟動整套服務，適合本機測試或不想直接在主機安裝 Docker 的情境。
-
-### 啟動 VM 並開啟服務
-
-```bash
-cd cve_ai   # 專案根目錄（Vagrantfile 所在位置）
-vagrant up
-```
-
-* `vagrant up` 第一次執行時會自動完成：安裝 Docker、clone GitHub repo 到 VM 內的 `/home/vagrant/sentinel-cve`、複製 `.env.example` 為 `.env`，並執行 `docker compose up -d --build`。
-* 之後每次 `vagrant up`（VM 已存在、只是關機狀態）**不會重跑安裝流程**，但因為 `docker-compose.yml` 中所有服務都設定 `restart: always`，Docker daemon 開機後會自動把先前的容器重新啟動，通常不需要再手動下指令。
-* 開機完成（約 1–2 分鐘）後，直接開瀏覽器訪問 **http://localhost:3000** 即可（VM 已將 `3000`、`5432` 埠轉發到主機）。
-
-### 常用指令
-
-```bash
-vagrant status    # 確認 VM 目前狀態（running / poweroff）
-vagrant ssh       # 進入 VM 內部（可再用 docker ps / docker logs 等指令）
-vagrant halt      # 關閉 VM（下次要用時再 vagrant up）
-vagrant destroy   # 完全刪除 VM（下次 vagrant up 會重新跑一次完整 provision）
-```
-
-### 如果容器沒有自動啟動，或想強制拉取最新程式碼重建
-
-```bash
-vagrant ssh -c "cd /home/vagrant/sentinel-cve && git pull && docker compose up -d --build"
-```
-
-### 驗證服務是否正常
-
-```bash
-vagrant ssh -c "docker ps --filter name=sentinel-cve"
-curl -I http://localhost:3000/api/health
-```

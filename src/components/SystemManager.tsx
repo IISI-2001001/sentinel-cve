@@ -26,6 +26,8 @@ import {
   Layers,
   Mail,
   Cloud,
+  Building2,
+  Database,
 } from 'lucide-react';
 import {
   Project,
@@ -37,7 +39,9 @@ import {
 } from '../types';
 import { ProjectManager } from './ProjectManager';
 import { CpeManager } from './CpeManager';
+import { OrgDirectoryManager } from './OrgDirectoryManager';
 import { NvdApiKeyManager } from './NvdApiKeyManager';
+import { DbConnectionManager } from './DbConnectionManager';
 import { SystemLogs } from './SystemLogs';
 
 interface SystemManagerProps {
@@ -47,7 +51,7 @@ interface SystemManagerProps {
   logs: ScanLog[];
   onRefreshData: () => void;
   onSelectCve: (cveId: string) => void;
-  defaultSubTab?: 'schedule' | 'cpe-management' | 'email-smtp' | 'teams-notification' | 'nvd-api' | 'logs';
+  defaultSubTab?: 'schedule' | 'cpe-management' | 'org-directory' | 'email-smtp' | 'teams-notification' | 'nvd-api' | 'db-config' | 'logs';
   onAddProduct?: (product: Partial<MonitoredProduct>) => void;
   onUpdateProduct?: (id: string, updates: Partial<MonitoredProduct>) => void;
   onDeleteProduct?: (id: string) => void;
@@ -68,7 +72,7 @@ export const SystemManager: React.FC<SystemManagerProps> = ({
   onTriggerProductScan,
 }) => {
   const [subTab, setSubTab] = useState<
-    'schedule' | 'cpe-management' | 'email-smtp' | 'teams-notification' | 'nvd-api' | 'logs'
+    'schedule' | 'cpe-management' | 'org-directory' | 'email-smtp' | 'teams-notification' | 'nvd-api' | 'db-config' | 'logs'
   >(defaultSubTab);
 
   // Sync defaultSubTab if updated externally
@@ -115,9 +119,12 @@ export const SystemManager: React.FC<SystemManagerProps> = ({
     autoNotifyEmail: true,
     lastRunAt: new Date().toISOString(),
     nextRunAt: new Date(Date.now() + 30 * 60000).toISOString(),
+    cpeAutoUpdateEnabled: true,
+    cpeUpdateIntervalMinutes: 1440,
   });
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
   const [isRunningScheduleNow, setIsRunningScheduleNow] = useState(false);
+  const [isCheckingCpeNow, setIsCheckingCpeNow] = useState(false);
   const [scheduleSuccessNotice, setScheduleSuccessNotice] = useState<string | null>(null);
 
   // Teams Config State
@@ -257,6 +264,32 @@ export const SystemManager: React.FC<SystemManagerProps> = ({
       setScheduleSuccessNotice(`執行失敗：${error?.message || '未知錯誤'}`);
     } finally {
       setIsRunningScheduleNow(false);
+    }
+  };
+
+  /** Checks every cached product for new NVD CPE identities right now — this is the exact
+   * same backend function the CPE auto-update schedule calls, just triggered manually. */
+  const handleCheckCpeUpdatesNow = async () => {
+    setIsCheckingCpeNow(true);
+    setScheduleSuccessNotice(null);
+    try {
+      const res = await fetch('/api/cpe-cache/refresh-all', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const nowIso = new Date().toISOString();
+      setScheduleConfig((prev) => ({ ...prev, cpeLastRunAt: nowIso }));
+      setScheduleSuccessNotice(
+        `CPE 更新檢查完成：共檢查 ${data.checkedCount ?? 0} 項產品，其中 ${data.updatedCount ?? 0} 項發現新 CPE${
+          data.errors?.length ? `，${data.errors.length} 項查詢失敗` : ''
+        }`
+      );
+      onRefreshData();
+    } catch (error: any) {
+      setScheduleSuccessNotice(`執行失敗：${error?.message || '未知錯誤'}`);
+    } finally {
+      setIsCheckingCpeNow(false);
     }
   };
 
@@ -412,6 +445,18 @@ export const SystemManager: React.FC<SystemManagerProps> = ({
           </button>
 
           <button
+            onClick={() => setSubTab('org-directory')}
+            className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              subTab === 'org-directory'
+                ? 'bg-white text-teal-700 shadow-2xs border border-teal-200 font-extrabold'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+            }`}
+          >
+            <Building2 className="w-4 h-4 text-teal-600" />
+            <span>組織清單管理</span>
+          </button>
+
+          <button
             onClick={() => setSubTab('nvd-api')}
             className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
               subTab === 'nvd-api'
@@ -421,6 +466,18 @@ export const SystemManager: React.FC<SystemManagerProps> = ({
           >
             <Key className="w-4 h-4 text-amber-600" />
             <span>NVD API Key</span>
+          </button>
+
+          <button
+            onClick={() => setSubTab('db-config')}
+            className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              subTab === 'db-config'
+                ? 'bg-white text-cyan-700 shadow-2xs border border-cyan-200 font-extrabold'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+            }`}
+          >
+            <Database className="w-4 h-4 text-cyan-600" />
+            <span>資料庫連線</span>
           </button>
 
           <button
@@ -537,6 +594,73 @@ export const SystemManager: React.FC<SystemManagerProps> = ({
               </button>
             </div>
 
+            {/* CPE Auto Update Schedule */}
+            <div className="pt-2 border-t border-slate-200 space-y-4">
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <div className="font-bold text-sm text-slate-900 flex items-center space-x-2">
+                    <Cpu className="w-4 h-4 text-indigo-600" />
+                    <span>CPE 對照自動更新排程</span>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    開啟後系統將依所設定週期，自動檢查「產品管理」頁面已儲存的每個產品是否有 NVD 新增的 CPE 識別碼，並自動更新對照快取。
+                  </p>
+                </div>
+
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!!scheduleConfig.cpeAutoUpdateEnabled}
+                    onChange={(e) => setScheduleConfig({ ...scheduleConfig, cpeAutoUpdateEnabled: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-700 uppercase">
+                    CPE 檢查執行週期 Frequency
+                  </label>
+                  <select
+                    value={scheduleConfig.cpeUpdateIntervalMinutes ?? 1440}
+                    onChange={(e) =>
+                      setScheduleConfig({ ...scheduleConfig, cpeUpdateIntervalMinutes: Number(e.target.value) })
+                    }
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-500 shadow-2xs"
+                  >
+                    <option value={360}>每 6 小時</option>
+                    <option value={720}>每 12 小時</option>
+                    <option value={1440}>每 24 小時 / 每日 (預設推薦)</option>
+                    <option value={10080}>每 7 天 / 每週</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="p-4 bg-indigo-50/60 border border-indigo-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="space-y-1 font-mono">
+                  <div className="text-indigo-900 font-bold flex items-center space-x-1.5">
+                    <Clock className="w-4 h-4 text-indigo-600" />
+                    <span>上次檢查時間: {scheduleConfig.cpeLastRunAt ? new Date(scheduleConfig.cpeLastRunAt).toLocaleString('zh-TW') : '尚未執行'}</span>
+                  </div>
+                  <div className="text-indigo-800 font-medium">
+                    下一次預計檢查時間: {scheduleConfig.cpeNextRunAt ? new Date(scheduleConfig.cpeNextRunAt).toLocaleString('zh-TW') : '計算中'}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleCheckCpeUpdatesNow}
+                  disabled={isCheckingCpeNow}
+                  className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center space-x-1.5 shadow-sm transition-all disabled:opacity-50 shrink-0 self-start sm:self-auto"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isCheckingCpeNow ? 'animate-spin' : ''}`} />
+                  <span>{isCheckingCpeNow ? '檢查中...' : '🔍 立即檢查所有產品的新 CPE'}</span>
+                </button>
+              </div>
+            </div>
+
             {/* Actions */}
             <div className="pt-4 border-t border-slate-200 flex items-center justify-end">
               <button
@@ -571,6 +695,25 @@ export const SystemManager: React.FC<SystemManagerProps> = ({
         </div>
       )}
 
+      {/* Sub-Tab View: Org Directory Management (departments / project managers) */}
+      {subTab === 'org-directory' && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 flex items-center space-x-2">
+                <Building2 className="w-5 h-5 text-teal-600" />
+                <span>組織清單管理 (Org Directory Management)</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                維護「所屬部門」與「專案經理」清單，供「專案管理」的「新增專案」表單以下拉選單方式讀取。
+              </p>
+            </div>
+          </div>
+
+          <OrgDirectoryManager />
+        </div>
+      )}
+
       {/* Sub-Tab View: NVD API Key Management */}
       {subTab === 'nvd-api' && (
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs space-y-6">
@@ -587,6 +730,25 @@ export const SystemManager: React.FC<SystemManagerProps> = ({
           </div>
 
           <NvdApiKeyManager />
+        </div>
+      )}
+
+      {/* Sub-Tab View: Database Connection Settings */}
+      {subTab === 'db-config' && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 flex items-center space-x-2">
+                <Database className="w-5 h-5 text-cyan-600" />
+                <span>資料庫連線管理 (Database Connection)</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                設定後端連線的 PostgreSQL 主機資訊；設定值會寫入後端本機檔案，儲存後需重新啟動後端服務才會套用。
+              </p>
+            </div>
+          </div>
+
+          <DbConnectionManager />
         </div>
       )}
 

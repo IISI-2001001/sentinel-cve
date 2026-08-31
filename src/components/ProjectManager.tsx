@@ -87,6 +87,21 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDept, setSelectedDept] = useState('ALL');
 
+  // Org directory (departments / project managers) maintained in 系統管理與設定中心,
+  // used to populate the dropdowns in the 新增/編輯專案 form.
+  const [orgDepartments, setOrgDepartments] = useState<string[]>([]);
+  const [orgProjectManagers, setOrgProjectManagers] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch('/api/org-directory')
+      .then((res) => res.json())
+      .then((data) => {
+        setOrgDepartments((data.departments || []).map((d: { name: string }) => d.name));
+        setOrgProjectManagers((data.projectManagers || []).map((p: { name: string }) => p.name));
+      })
+      .catch((err) => console.warn('Failed to fetch org directory:', err));
+  }, []);
+
   // Ticket States
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
@@ -491,6 +506,11 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
 
   // Filtered Departments
   const departments = Array.from(new Set(projects.map((p) => p.department || '未分類')));
+
+  // Ensure the currently-set value (e.g. from a legacy project not yet in the maintained list)
+  // still shows up as a selectable option so it isn't silently dropped when editing.
+  const departmentOptions = Array.from(new Set([...orgDepartments, formDepartment].filter(Boolean)));
+  const projectManagerOptions = Array.from(new Set([...orgProjectManagers, formOwnerName].filter(Boolean)));
 
   // Filtered Projects
   const filteredProjects = projects.filter((p) => {
@@ -2616,13 +2636,18 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
 
                   <div>
                     <label className="block font-bold text-slate-800 mb-1">所屬部門</label>
-                    <input
-                      type="text"
+                    <select
                       value={formDepartment}
                       onChange={(e) => setFormDepartment(e.target.value)}
-                      placeholder=""
                       className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
-                    />
+                    >
+                      <option value="">請選擇部門</option>
+                      {departmentOptions.map((dept) => (
+                        <option key={dept} value={dept}>
+                          {dept}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
@@ -2656,13 +2681,18 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   <div className="grid grid-cols-1 gap-3">
                     <div>
                       <label className="block font-semibold text-slate-700 mb-1">專案經理</label>
-                      <input
-                        type="text"
+                      <select
                         value={formOwnerName}
                         onChange={(e) => setFormOwnerName(e.target.value)}
-                        placeholder=""
                         className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-blue-600"
-                      />
+                      >
+                        <option value="">請選擇專案經理</option>
+                        {projectManagerOptions.map((pm) => (
+                          <option key={pm} value={pm}>
+                            {pm}
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
                   </div>
@@ -3029,13 +3059,18 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
 
                 <div>
                   <label className="block font-bold text-slate-800 mb-1">所屬部門</label>
-                  <input
-                    type="text"
+                  <select
                     value={formDepartment}
                     onChange={(e) => setFormDepartment(e.target.value)}
-                    placeholder=""
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
-                  />
+                  >
+                    <option value="">請選擇部門</option>
+                    {departmentOptions.map((dept) => (
+                      <option key={dept} value={dept}>
+                        {dept}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -3069,13 +3104,18 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 <div className="grid grid-cols-1 gap-3">
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">專案經理</label>
-                    <input
-                      type="text"
+                    <select
                       value={formOwnerName}
                       onChange={(e) => setFormOwnerName(e.target.value)}
-                      placeholder=""
                       className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-blue-600"
-                    />
+                    >
+                      <option value="">請選擇專案經理</option>
+                      {projectManagerOptions.map((pm) => (
+                        <option key={pm} value={pm}>
+                          {pm}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                 </div>

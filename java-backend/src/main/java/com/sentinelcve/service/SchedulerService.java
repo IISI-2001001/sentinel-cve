@@ -20,14 +20,17 @@ public class SchedulerService {
     private final ScanService scanService;
     private final AlertRuleEngineService alertRuleEngineService;
     private final ProjectDigestService projectDigestService;
+    private final CpeCacheService cpeCacheService;
 
     public SchedulerService(AppState state, LogService logService, ScanService scanService,
-                             AlertRuleEngineService alertRuleEngineService, ProjectDigestService projectDigestService) {
+                             AlertRuleEngineService alertRuleEngineService, ProjectDigestService projectDigestService,
+                             CpeCacheService cpeCacheService) {
         this.state = state;
         this.logService = logService;
         this.scanService = scanService;
         this.alertRuleEngineService = alertRuleEngineService;
         this.projectDigestService = projectDigestService;
+        this.cpeCacheService = cpeCacheService;
     }
 
     @Scheduled(fixedDelay = 30_000, initialDelay = 30_000)
@@ -94,6 +97,30 @@ public class SchedulerService {
                 }
                 logService.addLog("AUTO_SCAN", "SUCCESS", "[排程自動觸發] 全域自動掃描完成，已巡檢 " + targetProds.size() + " 項資產", "Auto Scheduler",
                     "觸發警報: " + totalAlerts + " 則");
+            }
+        }
+
+        boolean cpeUpdateEnabled;
+        String cpeNextRunAt;
+        synchronized (state.lock) {
+            cpeUpdateEnabled = state.scheduleConfig.isCpeAutoUpdateEnabled();
+            cpeNextRunAt = state.scheduleConfig.getCpeNextRunAt();
+        }
+        if (cpeUpdateEnabled) {
+            long cpeNextRunTime = cpeNextRunAt != null ? Instant.parse(cpeNextRunAt).toEpochMilli() : 0;
+            if (cpeNextRunTime == 0 || now >= cpeNextRunTime) {
+                int intervalMinutes;
+                synchronized (state.lock) {
+                    intervalMinutes = state.scheduleConfig.getCpeUpdateIntervalMinutes() > 0
+                        ? state.scheduleConfig.getCpeUpdateIntervalMinutes() : 1440;
+                    state.scheduleConfig.setCpeLastRunAt(Instant.now().toString());
+                    state.scheduleConfig.setCpeNextRunAt(Instant.ofEpochMilli(now + intervalMinutes * 60_000L).toString());
+                }
+                try {
+                    cpeCacheService.refreshAllCachedCpe("排程自動觸發");
+                } catch (Exception err) {
+                    logService.addLog("SYSTEM_INFO", "ERROR", "[排程自動觸發] CPE 對照自動更新失敗: " + safeMessage(err), "CPE Auto Update");
+                }
             }
         }
 

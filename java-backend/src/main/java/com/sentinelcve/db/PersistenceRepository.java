@@ -100,6 +100,16 @@ public class PersistenceRepository {
               candidates JSONB NOT NULL,
               updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
             );
+            CREATE TABLE IF NOT EXISTS departments (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL UNIQUE,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+            CREATE TABLE IF NOT EXISTS project_managers (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL UNIQUE,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
             CREATE INDEX IF NOT EXISTS idx_cves_severity ON cves (severity);
             CREATE INDEX IF NOT EXISTS idx_cves_cisa_kev ON cves (cisa_kev);
             CREATE INDEX IF NOT EXISTS idx_notifications_status ON notifications (status);
@@ -159,6 +169,58 @@ public class PersistenceRepository {
     /** Deletes a single cached product's CPE candidates by product name. */
     public void deleteCpeCacheEntry(String productName) {
         jdbc.update("DELETE FROM product_cpe_cache WHERE product_name_key = ?", cpeCacheKey(productName));
+    }
+
+    /**
+     * Org directory (departments / project managers) — maintained under 系統管理與設定中心 so that
+     * the "新增專案" form can offer them as dropdown selections instead of freeform text.
+     */
+    public List<java.util.Map<String, Object>> listDepartments() {
+        return jdbc.query("SELECT id, name, created_at FROM departments ORDER BY name ASC", orgEntryMapper());
+    }
+
+    public java.util.Map<String, Object> addDepartment(String name) {
+        String id = "dept-" + System.currentTimeMillis();
+        jdbc.update("""
+            INSERT INTO departments (id, name) VALUES (?, ?)
+            ON CONFLICT (name) DO NOTHING
+            """, id, name);
+        List<java.util.Map<String, Object>> rows = jdbc.query(
+            "SELECT id, name, created_at FROM departments WHERE name = ?", orgEntryMapper(), name);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    public void deleteDepartment(String id) {
+        jdbc.update("DELETE FROM departments WHERE id = ?", id);
+    }
+
+    public List<java.util.Map<String, Object>> listProjectManagers() {
+        return jdbc.query("SELECT id, name, created_at FROM project_managers ORDER BY name ASC", orgEntryMapper());
+    }
+
+    public java.util.Map<String, Object> addProjectManager(String name) {
+        String id = "pm-" + System.currentTimeMillis();
+        jdbc.update("""
+            INSERT INTO project_managers (id, name) VALUES (?, ?)
+            ON CONFLICT (name) DO NOTHING
+            """, id, name);
+        List<java.util.Map<String, Object>> rows = jdbc.query(
+            "SELECT id, name, created_at FROM project_managers WHERE name = ?", orgEntryMapper(), name);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    public void deleteProjectManager(String id) {
+        jdbc.update("DELETE FROM project_managers WHERE id = ?", id);
+    }
+
+    private RowMapper<java.util.Map<String, Object>> orgEntryMapper() {
+        return (rs, rowNum) -> {
+            java.util.LinkedHashMap<String, Object> row = new java.util.LinkedHashMap<>();
+            row.put("id", rs.getString("id"));
+            row.put("name", rs.getString("name"));
+            row.put("createdAt", rs.getTimestamp("created_at").toInstant().toString());
+            return row;
+        };
     }
 
     private PGobject json(Object value) {
