@@ -95,7 +95,7 @@ SentinelCVE 採用 **Full-Stack (Java 21/Spring Boot 3 + React/Vite)** 一體化
 * **模組劃分 (`java-backend/src/main/java/com/sentinelcve/`)**：
   * `controller/*`：REST API endpoints（`/api/dashboard/stats`, `/api/cves`, `/api/products`, `/api/projects`, `/api/tickets`, `/api/schedule/*`, `/api/system/*`, `/api/system/db-config`, `/api/cpe-cache/*`, `/api/nvd/*`, `/api/org-directory/*` 等）。
   * `service/*`：核心業務邏輯，包含 `ScanService`（NVD/OSV 檢索與版本比對）、`ProductProviderService`（NVD CPE 查詢）、`CpeCacheService`（批次檢查已快取產品是否有新發布 CPE，供手動觸發與排程共用）、`MailService`（動態 SMTP 寄信）、`WebhookDispatchService`（Teams/Slack/自訂 Webhook）、`AlertRuleEngineService`（告警規則引擎）、`SchedulerService`（`@Scheduled` 背景排程，含掃描排程與 CPE 對照自動更新排程）、`ProjectDigestService`（專案摘要通知）。
-  * `db/PersistenceRepository.java` + `config/DataSourceConfig.java`：應用程式狀態（監控產品、CVE 資料庫、警報規則、通知、Webhook、稽核日誌、專案、工單、CPE 快取、NVD/Email/Teams/排程設定）全部以 PostgreSQL 儲存，每個集合對應一張資料表，主要欄位另外抽出做索引（如 `severity`、`cisa_kev`、`status`），完整物件則存於 `data JSONB` 欄位（透過 `PGobject` 序列化），服務啟動時整批載入記憶體、每次異動即以 `@Async` 方式整批寫回資料庫（Transaction 包裹，確保一致性）。
+  * `db/PersistenceRepository.java` + `config/DataSourceConfig.java`：應用程式狀態（監控產品、CVE 資料庫、警報規則、通知、Webhook、稽核日誌、專案、工單、CPE 快取、NVD/Email/Teams/排程設定）全部以 PostgreSQL 儲存，每個集合對應一張資料表，主要欄位另外抽出做索引（如 `severity`、`cisa_kev`、`status`），完整物件則存於 `data JSONB` 欄位（透過 `PGobject` 序列化），服務啟動時整批載入記憶體、每次異動即以 `@Async` 方式整批寫回資料庫（Transaction 包裹，確保一致性）。另有 `product_cpe_cache`、`departments`、`project_managers` 三張獨立維運表格，採一般欄位（非 JSONB）直接 CRUD，不隨 AppState 整批快照寫回，供「CPE 對照管理」與「組織清單管理」頁面即時查詢/新增/刪除使用。
   * `model/*`：與前端 `src/types.ts` 對應之 Java Model（Jackson camelCase 序列化）。
 
 ### 資料流與背景排程 Worker
@@ -104,7 +104,7 @@ SentinelCVE 採用 **Full-Stack (Java 21/Spring Boot 3 + React/Vite)** 一體化
   * `SchedulerService` 以 Spring 的 `@Scheduled(fixedDelay = 30000)` 註解實作，每 30 秒執行一次背景輪詢。
   * **全域系統自動排程**：可在「系統管理 > ⏱️ 自動排程」頁面靈活調整全域掃描週期（**15 分鐘、30 分鐘、1 小時、6 小時、24 小時**）與掃描資產範疇（全部資產 / 僅限 Critical & High）。
   * **個別產品獨立週期**：亦可在「系統管理 > 📦 監控資產產品」設定個別產品的 `scanIntervalMinutes`（預設 30 分鐘）。
-  * **CPE 對照自動更新排程**：獨立於上述弱點掃描排程，可在「系統管理 > ⏱️ 自動排程」另外設定間隔（如 6 小時、12 小時、24 小時），定期重新向 NVD 查詢已快取產品是否有新發布的 CPE 識別碼並自動更新快取；同一邏輯也可在「產品管理」頁面以「確認所有產品是否有新 CPE」按鈕手動觸發。
+  * **CPE 對照自動更新排程**：獨立於上述弱點掃描排程，可在「系統管理 > ⏱️ 自動排程」另外設定間隔（**6 小時、12 小時、24 小時、每週**），定期重新向 NVD 查詢已快取產品是否有新發布的 CPE 識別碼並自動更新快取；同一邏輯也可在「產品管理」頁面以「確認所有產品是否有新 CPE」按鈕手動觸發，並各自顯示獨立的上次/下次執行時間。
   * **自動告警與派報**：每當達到排程時間，背景 Worker 會自動調用 NVD/OSV API 發起弱點檢索；若比對到符合條件的高危漏洞（如 CVSS $\ge$ 7.0），將自動觸發 Teams Webhook 即時推播、發送 Email 通知，並寫入系統 Audit Log。
 
 ---
