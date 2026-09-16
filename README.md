@@ -204,14 +204,43 @@ volumes:
 
 ### 1. 本地非容器化開發 (Local Dev)
 
-如果您希望直接在主機上執行，需先準備一個可連線的 PostgreSQL（本機安裝或用 Docker 快速起一個都可以）：
+如果您希望直接在主機上執行，需先準備一個可連線的 PostgreSQL，以下三種方式擇一即可：
+
+**方式 A：使用 Docker 快速啟動一個本機測試用 PostgreSQL 容器**
 
 ```bash
-# 快速啟動一個本機測試用 PostgreSQL 容器
 docker run -d --name sentinel-cve-db -p 5432:5432 \
   -e POSTGRES_USER=sentinel -e POSTGRES_PASSWORD=sentinel -e POSTGRES_DB=sentinel_cve \
   postgres:16-alpine
+```
 
+**方式 B：使用 Vagrant VM（無 Docker Desktop 環境時的替代方案，本機開發實際採用）**
+
+本專案在 `sentinel-cve-db/`（未納入版本控制，需自行建立或已存在於本機）提供一份獨立的 `Vagrantfile`，會啟動一台 Rocky Linux 9 VM，並在 VM 內以 Docker 執行 PostgreSQL 16 容器，固定以私有網路 IP `192.168.100.20:5432` 對外提供連線，不需佔用/依賴主機上的 Docker：
+
+```bash
+cd sentinel-cve-db
+
+# 首次啟動（會自動下載 box、開機、於 VM 內安裝 Docker 並啟動 Postgres 容器）
+vagrant up
+
+# 之後每次要用本機資料庫時，皆執行 vagrant up 即可（VM 內 Postgres 容器為 --restart always，隨 VM 開機自動啟動）
+# 確認狀態
+vagrant status
+
+# 不使用時可關機釋放資源
+vagrant halt
+```
+
+啟動後將 `DATABASE_URL` 指向該 VM 位址，例如：`postgres://sentinel:sentinel@192.168.100.20:5432/sentinel_cve`。
+
+**方式 C：連接既有/外部 PostgreSQL**
+
+直接於 `.env` 或環境變數設定既有 PostgreSQL 主機的 `DATABASE_URL`。
+
+準備好資料庫連線後，接續啟動前後端：
+
+```bash
 # 前端：安裝套件並啟動 Vite dev server（熱重載，預設 5173）
 npm install
 npm run dev
