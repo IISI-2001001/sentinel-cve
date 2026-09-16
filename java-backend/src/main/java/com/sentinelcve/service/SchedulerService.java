@@ -2,6 +2,7 @@ package com.sentinelcve.service;
 
 import com.sentinelcve.model.MonitoredProduct;
 import com.sentinelcve.model.Project;
+import com.sentinelcve.model.ProjectProductBinding;
 import com.sentinelcve.state.AppState;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -79,23 +80,18 @@ public class SchedulerService {
                 }
                 logService.addLog("AUTO_SCAN", "INFO", "[排程自動觸發] 啟動全域自動定期資安掃描 (頻率: " + state.scheduleConfig.getIntervalMinutes() + " 分鐘)", "Auto Scheduler");
 
-                List<MonitoredProduct> targetProds;
-                synchronized (state.lock) {
-                    targetProds = List.copyOf(state.products);
-                }
+                List<ProjectProductBinding> targetBindings = allEnabledBindings();
 
                 int totalAlerts = 0;
-                for (MonitoredProduct prod : targetProds) {
+                for (ProjectProductBinding binding : targetBindings) {
                     try {
-                        List<com.sentinelcve.model.CveItem> found = scanService.scanProductFromVerifiedSources(prod);
-                        prod.setDetectedCveCount(found.size());
-                        prod.setLastScannedAt(Instant.now().toString());
-                        for (var cve : found) totalAlerts += alertRuleEngineService.evaluateAlertRules(cve, prod);
+                        List<com.sentinelcve.model.CveItem> found = scanService.scanProjectBinding(binding);
+                        for (var cve : found) totalAlerts += alertRuleEngineService.evaluateAlertRules(cve, binding);
                     } catch (Exception err) {
-                        // Scheduled scan failure for a single product should not abort the batch.
+                        // Scheduled scan failure for a single binding should not abort the batch.
                     }
                 }
-                logService.addLog("AUTO_SCAN", "SUCCESS", "[排程自動觸發] 全域自動掃描完成，已巡檢 " + targetProds.size() + " 項資產", "Auto Scheduler",
+                logService.addLog("AUTO_SCAN", "SUCCESS", "[排程自動觸發] 全域自動掃描完成，已巡檢 " + targetBindings.size() + " 項資產", "Auto Scheduler",
                     "觸發警報: " + totalAlerts + " 則");
             }
         }
@@ -124,25 +120,38 @@ public class SchedulerService {
             }
         }
 
-        List<MonitoredProduct> productsSnapshot;
-        synchronized (state.lock) {
-            productsSnapshot = List.copyOf(state.products);
-        }
-        for (MonitoredProduct prod : productsSnapshot) {
-            if (!prod.isAutoScanEnabled()) continue;
-            long lastScanTime = prod.getLastScannedAt() != null ? Instant.parse(prod.getLastScannedAt()).toEpochMilli() : 0;
-            long intervalMs = prod.getScanIntervalMinutes() * 60_000L;
+        // Per-binding auto-scan: each project's product binding may opt out (autoScanEnabled)
+        // and set its own scanIntervalMinutes, mirroring the old per-MonitoredProduct behavior
+        // but scoped to each project's specific product+version usage instead of a global list.
+        List<ProjectProductBinding> bindingsSnapshot = allEnabledBindings();
+        for (ProjectProductBinding binding : bindingsSnapshot) {
+            long lastScanTime = binding.getLastScannedAt() != null ? Instant.parse(binding.getLastScannedAt()).toEpochMilli() : 0;
+            long intervalMs = Math.max(binding.getScanIntervalMinutes(), 1) * 60_000L;
             if (now - lastScanTime >= intervalMs) {
-                prod.setLastScannedAt(Instant.now().toString());
-                logService.addLog("AUTO_SCAN", "INFO", "系統定期自動背景掃描產品: " + prod.getName(), prod.getName());
+                logService.addLog("AUTO_SCAN", "INFO", "系統定期自動背景掃描套用產品: " + binding.getProductName(), binding.getProductName());
                 try {
-                    List<com.sentinelcve.model.CveItem> found = scanService.scanProductFromVerifiedSources(prod);
-                    prod.setDetectedCveCount(found.size());
-                    for (var cve : found) alertRuleEngineService.evaluateAlertRules(cve, prod);
+                    List<com.sentinelcve.model.CveItem> found = scanService.scanProjectBinding(binding);
+                    for (var cve : found) alertRuleEngineService.evaluateAlertRules(cve, binding);
                 } catch (Exception err) {
-                    // Auto-scan failure for a single product should not abort the loop.
+                    // Auto-scan failure for a single binding should not abort the loop.
                 }
             }
+        }
+    }
+
+    /** Collects every project's product bindings that have autoScanEnabled (defaults true) across
+     * all projects, since scanning is now performed per project-binding rather than per
+     * globally-managed MonitoredProduct. */
+    private List<ProjectProductBinding> allEnabledBindings() {
+        synchronized (state.lock) {
+            List<ProjectProductBinding> result = new java.util.ArrayList<>();
+            for (Project project : state.projects) {
+                if (project.getProductBindings() == null) continue;
+                for (ProjectProductBinding binding : project.getProductBindings()) {
+                    if (binding.isAutoScanEnabled()) result.add(binding);
+                }
+            }
+            return result;
         }
     }
 

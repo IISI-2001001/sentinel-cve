@@ -58,6 +58,115 @@ public class ScanService {
         return found;
     }
 
+    /** Scans a single project's product binding for CVEs by resolving the exact CPE (global
+     * catalog's base CPE + this project's targetVersion) and querying NVD's cpeName-match API,
+     * mirroring ProductProviderService's CPE branch but scoped per project-binding rather than
+     * per globally-managed MonitoredProduct. Merges discovered CVEs into cvesDatabase and
+     * updates the binding's own detectedCveCount/lastScannedAt. */
+    public List<CveItem> scanProjectBinding(ProjectProductBinding binding) throws Exception {
+        if (binding.getProductCpe() == null || binding.getProductCpe().isBlank()) {
+            throw new RuntimeException("此套用產品缺少全域產品目錄的 CPE 資訊，請重新選取產品後再試一次。");
+        }
+        if (binding.getTargetVersion() == null || binding.getTargetVersion().isBlank()) {
+            throw new RuntimeException("此套用產品缺少目標套用版本號，請先編輯設定版本。");
+        }
+
+        String[] parts = binding.getProductCpe().split(":");
+        if (parts.length >= 6) parts[5] = binding.getTargetVersion();
+        String exactCpe = String.join(":", parts);
+
+        String sourceUrl = "https://services.nvd.nist.gov/rest/json/cves/2.0?cpeName=" +
+            java.net.URLEncoder.encode(exactCpe, java.nio.charset.StandardCharsets.UTF_8) + "&isVulnerable";
+        String nvdApiKey = resolveNvdApiKey();
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(URI.create(sourceUrl))
+            .timeout(Duration.ofSeconds(20)).header("User-Agent", "SentinelCVE/1.0").GET();
+        if (nvdApiKey != null && !nvdApiKey.isBlank()) requestBuilder.header("apiKey", nvdApiKey);
+        HttpResponse<String> response = http.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() / 100 != 2) throw new RuntimeException("NVD API 回傳 HTTP " + response.statusCode());
+
+        JsonNode data = mapper.readTree(response.body());
+        List<CveItem> found = new ArrayList<>();
+        for (JsonNode entry : data.path("vulnerabilities")) {
+            found.add(bindingToCve(entry.path("cve"), binding, exactCpe, sourceUrl));
+        }
+
+        synchronized (state.lock) {
+            for (CveItem item : found) {
+                int idx = -1;
+                for (int i = 0; i < state.cvesDatabase.size(); i++) {
+                    CveItem existing = state.cvesDatabase.get(i);
+                    if (existing.getId().equals(item.getId()) && existing.getProductName().equals(binding.getProductName())) {
+                        idx = i;
+                        break;
+                    }
+                }
+                if (idx >= 0) state.cvesDatabase.set(idx, item);
+                else state.cvesDatabase.add(0, item);
+            }
+        }
+
+        binding.setDetectedCveCount(found.size());
+        binding.setLastScannedAt(Instant.now().toString());
+        return found;
+    }
+
+    private CveItem bindingToCve(JsonNode cve, ProjectProductBinding binding, String exactCpe, String sourceUrl) {
+        JsonNode metric = firstNonMissingMetric(
+            cve.path("metrics").path("cvssMetricV31"),
+            cve.path("metrics").path("cvssMetricV30"),
+            cve.path("metrics").path("cvssMetricV2"));
+        JsonNode cvssData = metric != null ? metric.path("cvssData") : mapper.createObjectNode();
+
+        String description = "No description";
+        for (JsonNode d : cve.path("descriptions")) {
+            if ("en".equals(d.path("lang").asText())) {
+                description = d.path("value").asText(description);
+                break;
+            }
+        }
+
+        CveItem item = new CveItem();
+        item.setId(cve.path("id").asText());
+        item.setTitle(cve.path("id").asText() + ": " + description.substring(0, Math.min(100, description.length())));
+        item.setDescription(description);
+        item.setPublishedDate(cve.path("published").asText(null));
+        item.setLastModifiedDate(cve.path("lastModified").asText(null));
+        item.setProductName(binding.getProductName());
+        item.setVendorName(binding.getVendor());
+
+        CvssMetrics cvss = new CvssMetrics();
+        double baseScore = cvssData.path("baseScore").asDouble(0);
+        cvss.setBaseScore(baseScore);
+        String severity = cvssData.path("baseSeverity").asText(null);
+        cvss.setSeverity(severity == null ? "HIGH" : severity.toUpperCase(Locale.ROOT));
+        cvss.setVectorString(cvssData.path("vectorString").asText(""));
+        item.setCvss(cvss);
+
+        item.setCisaKev(cve.path("cisaExploitAdd").isTextual());
+        item.setCisaKevDueDate(cve.path("cisaActionDue").asText(null));
+        item.setAffectedVersions(List.of(binding.getTargetVersion()));
+        item.setCpe(List.of(exactCpe));
+
+        List<ReferenceLink> refs = new ArrayList<>();
+        int count = 0;
+        for (JsonNode ref : cve.path("references")) {
+            if (count++ >= 10) break;
+            refs.add(new ReferenceLink(ref.path("source").asText("Reference"), ref.path("url").asText(null)));
+        }
+        item.setReferences(refs);
+        item.setDataSources(new ArrayList<>(List.of(new DataSourceInfo("NVD", sourceUrl, Instant.now().toString()))));
+        item.setMatchConfidence("HIGH");
+        item.setMatchedBy("NVD_CPE_APPLICABILITY");
+        return item;
+    }
+
+    private static JsonNode firstNonMissingMetric(JsonNode... nodes) {
+        for (JsonNode n : nodes) {
+            if (n != null && n.isArray() && n.size() > 0) return n.get(0);
+        }
+        return null;
+    }
+
     /** Resolves the NVD API key: saved config (via 系統管理 > NVD API Key) takes priority over
      * the NVD_API_KEY environment variable. Returns null when neither is configured. */
     private String resolveNvdApiKey() {

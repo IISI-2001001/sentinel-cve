@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.sentinelcve.model.CveItem;
 import com.sentinelcve.model.MonitoredProduct;
 import com.sentinelcve.model.Project;
 import com.sentinelcve.service.LogService;
@@ -39,15 +40,20 @@ public class ProjectController {
     private final StateService stateService;
     private final LogService logService;
     private final ProjectDigestService projectDigestService;
+    private final com.sentinelcve.service.ScanService scanService;
+    private final com.sentinelcve.service.AlertRuleEngineService alertRuleEngineService;
     private final ObjectMapper mapper;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build();
 
     public ProjectController(AppState state, StateService stateService, LogService logService,
-                             ProjectDigestService projectDigestService, ObjectMapper mapper) {
+                             ProjectDigestService projectDigestService, com.sentinelcve.service.ScanService scanService,
+                             com.sentinelcve.service.AlertRuleEngineService alertRuleEngineService, ObjectMapper mapper) {
         this.state = state;
         this.stateService = stateService;
         this.logService = logService;
         this.projectDigestService = projectDigestService;
+        this.scanService = scanService;
+        this.alertRuleEngineService = alertRuleEngineService;
         this.mapper = mapper;
     }
 
@@ -60,8 +66,10 @@ public class ProjectController {
                 List<MonitoredProduct> prjProducts = state.products.stream()
                     .filter(product -> productIds.contains(product.getId()))
                     .toList();
-                int totalCves = prjProducts.stream().mapToInt(MonitoredProduct::getDetectedCveCount).sum();
-                int totalAlerts = prjProducts.stream().mapToInt(MonitoredProduct::getActiveAlertCount).sum();
+                List<com.sentinelcve.model.ProjectProductBinding> bindings =
+                    prj.getProductBindings() != null ? prj.getProductBindings() : List.of();
+                int totalCves = bindings.stream().mapToInt(com.sentinelcve.model.ProjectProductBinding::getDetectedCveCount).sum();
+                int totalAlerts = bindings.stream().mapToInt(com.sentinelcve.model.ProjectProductBinding::getActiveAlertCount).sum();
 
                 LinkedHashMap<String, Object> item = mapper.convertValue(
                     prj, new TypeReference<LinkedHashMap<String, Object>>() {});
@@ -96,6 +104,12 @@ public class ProjectController {
         newProject.setOwnerEmail(nonBlank(asString(payload.get("ownerEmail")), ""));
         newProject.setSecondaryContacts(toStringList(payload.get("secondaryContacts")));
         newProject.setProductIds(toStringList(payload.get("productIds")));
+        List<String> deploymentEnvironments = toStringList(payload.get("deploymentEnvironments"));
+        newProject.setDeploymentEnvironments(
+            deploymentEnvironments != null && !deploymentEnvironments.isEmpty()
+                ? deploymentEnvironments
+                : new ArrayList<>(List.of("DEV", "SIT", "UAT", "PRD"))
+        );
         newProject.setNotifyEmail(payload.containsKey("notifyEmail") ? truthy(payload.get("notifyEmail")) : true);
         newProject.setNotifyFrequency(notifyFrequency);
         newProject.setVersionNotifyEnabled(payload.containsKey("versionNotifyEnabled") ? truthy(payload.get("versionNotifyEnabled")) : true);
@@ -339,6 +353,46 @@ public class ProjectController {
         response.put("emailSubject", "[SentinelCVE 緊急通報] 專案「" + prj.getName() + "」漏洞影響風險通知");
         response.put("message", "已派發測試預警郵件至專案負責人信箱: " + prj.getOwnerName() + " <" + recipient + ">");
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{id}/bindings/{productId}/scan")
+    public ResponseEntity<?> scanBinding(@PathVariable String id, @PathVariable String productId) {
+        Project project;
+        com.sentinelcve.model.ProjectProductBinding binding;
+        synchronized (state.lock) {
+            project = state.projects.stream().filter(item -> id.equals(item.getId())).findFirst().orElse(null);
+            if (project == null) return error(HttpStatus.NOT_FOUND, "專案不存在");
+            binding = (project.getProductBindings() != null ? project.getProductBindings() : List.<com.sentinelcve.model.ProjectProductBinding>of())
+                .stream().filter(b -> productId.equals(b.getProductId())).findFirst().orElse(null);
+            if (binding == null) return error(HttpStatus.NOT_FOUND, "此專案尚未套用該產品");
+        }
+
+        try {
+            List<CveItem> found = scanService.scanProjectBinding(binding);
+            int alertsTriggered = 0;
+            for (CveItem cve : found) alertsTriggered += alertRuleEngineService.evaluateAlertRules(cve, binding);
+
+            logService.addLog(
+                "MANUAL_SCAN", "SUCCESS",
+                "專案【" + project.getName() + "】套用產品【" + binding.getProductName() + " " + binding.getTargetVersion() + "】掃描完成，發現 " + found.size() + " 項 CVE",
+                binding.getProductName(), "觸發新警報: " + alertsTriggered + " 則"
+            );
+            stateService.persist();
+
+            LinkedHashMap<String, Object> response = new LinkedHashMap<>();
+            response.put("productId", productId);
+            response.put("productName", binding.getProductName());
+            response.put("detectedCveCount", found.size());
+            response.put("alertsTriggered", alertsTriggered);
+            response.put("lastScannedAt", binding.getLastScannedAt());
+            response.put("cves", found);
+            return ResponseEntity.ok(response);
+        } catch (Exception err) {
+            logService.addLog("MANUAL_SCAN", "ERROR",
+                "專案【" + project.getName() + "】套用產品【" + binding.getProductName() + "】掃描失敗: " + safeMessage(err),
+                binding.getProductName());
+            return error(HttpStatus.BAD_GATEWAY, safeMessage(err, "掃描失敗"));
+        }
     }
 
     private void addFact(ArrayNode facts, String name, String value) {

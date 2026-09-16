@@ -19,6 +19,7 @@ public class Project {
     private List<String> secondaryContacts;
     private List<String> productIds;
     private List<ProjectProductBinding> productBindings;
+    private List<String> deploymentEnvironments; // 此專案可用的部署環境清單（各客戶/專案不同，預設 DEV/SIT/UAT/PRD）
     private boolean notifyEmail;
     private String notifyFrequency; // REALTIME | EVERY_15_MIN | HOURLY | DAILY | WEEKLY
     private Boolean versionNotifyEnabled;

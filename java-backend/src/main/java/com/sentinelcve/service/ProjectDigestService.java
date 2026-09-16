@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sentinelcve.model.CveItem;
 import com.sentinelcve.model.MonitoredProduct;
 import com.sentinelcve.model.Project;
+import com.sentinelcve.model.ProjectProductBinding;
 import com.sentinelcve.provider.ProductProviderService;
 import com.sentinelcve.state.AppState;
 import lombok.Data;
@@ -104,10 +105,11 @@ public class ProjectDigestService {
         List<MonitoredProduct> versionItems = projectProducts.stream()
             .filter(p -> Boolean.TRUE.equals(p.getHasUpdateAvailable()) && !alertRuleEngineService.hasClosedVersionTicket(project.getId(), p.getName()))
             .toList();
+        List<ProjectProductBinding> projectBindings = project.getProductBindings() != null ? project.getProductBindings() : List.of();
         List<CveItem> cveItems;
         synchronized (state.lock) {
             cveItems = state.cvesDatabase.stream()
-                .filter(c -> projectProducts.stream().anyMatch(p -> p.getName().equalsIgnoreCase(c.getProductName())))
+                .filter(c -> projectBindings.stream().anyMatch(b -> b.getProductName().equalsIgnoreCase(c.getProductName())))
                 .filter(c -> c.getCvss().getBaseScore() >= project.getNotifyMinCvss())
                 .filter(c -> !project.isNotifyCisaKevOnly() || c.isCisaKev())
                 .filter(c -> !alertRuleEngineService.hasClosedCveTicket(project.getId(), c.getId()))

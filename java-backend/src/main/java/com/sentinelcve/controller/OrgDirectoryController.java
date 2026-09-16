@@ -15,10 +15,11 @@ import java.util.Map;
 
 /**
  * Admin management endpoints for the "組織清單管理" page under 系統管理與設定中心.
- * Maintains the {@code departments}, {@code project_managers} and {@code deployment_environments}
- * lookup tables so that the "新增專案" form in 專案管理 can offer departments/PMs as dropdown
- * selections instead of freeform text, and the "使用產品清單" binding form can offer deployment
- * environments (e.g. DEV/SIT/UAT/PRD) that users can extend on demand.
+ * Maintains the {@code departments} and {@code project_managers} lookup tables so that the
+ * "新增專案" form in 專案管理 can offer them as dropdown selections instead of freeform text.
+ * (Deployment environments are intentionally NOT managed here — each customer/project uses a
+ * different set of environments, so that list is maintained per-project on the Project entity
+ * itself rather than as a global system-wide setting.)
  */
 @RestController
 @RequestMapping("/api/org-directory")
@@ -34,8 +35,7 @@ public class OrgDirectoryController {
     public ResponseEntity<?> list() {
         return ResponseEntity.ok(Map.of(
             "departments", persistenceRepository.listDepartments(),
-            "projectManagers", persistenceRepository.listProjectManagers(),
-            "deploymentEnvironments", persistenceRepository.listDeploymentEnvironments()
+            "projectManagers", persistenceRepository.listProjectManagers()
         ));
     }
 
@@ -68,22 +68,6 @@ public class OrgDirectoryController {
     @DeleteMapping("/project-managers/{id}")
     public ResponseEntity<?> deleteProjectManager(@PathVariable String id) {
         persistenceRepository.deleteProjectManager(id);
-        return ResponseEntity.ok(Map.of("success", true));
-    }
-
-    @PostMapping("/environments")
-    public ResponseEntity<?> addDeploymentEnvironment(@RequestBody(required = false) Map<String, Object> body) {
-        String name = asString(safeBody(body).get("name"));
-        if (!hasText(name)) {
-            return ResponseEntity.badRequest().body(error("name is required."));
-        }
-        Map<String, Object> entry = persistenceRepository.addDeploymentEnvironment(name.trim());
-        return ResponseEntity.ok(entry);
-    }
-
-    @DeleteMapping("/environments/{id}")
-    public ResponseEntity<?> deleteDeploymentEnvironment(@PathVariable String id) {
-        persistenceRepository.deleteDeploymentEnvironment(id);
         return ResponseEntity.ok(Map.of("success", true));
     }
 

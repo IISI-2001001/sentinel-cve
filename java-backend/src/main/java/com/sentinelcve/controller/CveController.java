@@ -83,24 +83,30 @@ public class CveController {
         List<String> scannedProductNames = new ArrayList<>();
         List<Map<String, String>> errors = new ArrayList<>();
 
-        List<MonitoredProduct> targetProds;
+        List<com.sentinelcve.model.ProjectProductBinding> targetBindings;
         synchronized (state.lock) {
-            targetProds = hasText(productId)
-                ? state.products.stream().filter(p -> productId.equals(p.getId())).toList()
-                : state.products.stream().filter(MonitoredProduct::isAutoScanEnabled).toList();
+            targetBindings = new ArrayList<>();
+            for (com.sentinelcve.model.Project project : state.projects) {
+                if (project.getProductBindings() == null) continue;
+                for (com.sentinelcve.model.ProjectProductBinding binding : project.getProductBindings()) {
+                    if (hasText(productId) ? productId.equals(binding.getProductId()) : binding.isAutoScanEnabled()) {
+                        targetBindings.add(binding);
+                    }
+                }
+            }
         }
 
-        for (MonitoredProduct prod : targetProds) {
+        for (com.sentinelcve.model.ProjectProductBinding binding : targetBindings) {
             try {
-                List<CveItem> found = scanService.scanProductFromVerifiedSources(prod);
-                scannedProductNames.add(prod.getName());
+                List<CveItem> found = scanService.scanProjectBinding(binding);
+                scannedProductNames.add(binding.getProductName());
                 for (CveItem cve : found) {
-                    totalAlertsTriggered += alertRuleEngineService.evaluateAlertRules(cve, prod);
+                    totalAlertsTriggered += alertRuleEngineService.evaluateAlertRules(cve, binding);
                 }
             } catch (Exception err) {
                 LinkedHashMap<String, String> error = new LinkedHashMap<>();
-                error.put("productId", prod.getId());
-                error.put("productName", prod.getName());
+                error.put("productId", binding.getProductId());
+                error.put("productName", binding.getProductName());
                 error.put("error", safeMessage(err, "掃描失敗"));
                 errors.add(error);
             }

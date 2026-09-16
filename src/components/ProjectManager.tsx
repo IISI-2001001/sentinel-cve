@@ -91,7 +91,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   // used to populate the dropdowns in the 新增/編輯專案 form.
   const [orgDepartments, setOrgDepartments] = useState<string[]>([]);
   const [orgProjectManagers, setOrgProjectManagers] = useState<string[]>([]);
-  const [orgDeploymentEnvironments, setOrgDeploymentEnvironments] = useState<string[]>([]);
 
   useEffect(() => {
     fetch('/api/org-directory')
@@ -99,7 +98,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
       .then((data) => {
         setOrgDepartments((data.departments || []).map((d: { name: string }) => d.name));
         setOrgProjectManagers((data.projectManagers || []).map((p: { name: string }) => p.name));
-        setOrgDeploymentEnvironments((data.deploymentEnvironments || []).map((e: { name: string }) => e.name));
       })
       .catch((err) => console.warn('Failed to fetch org directory:', err));
   }, []);
@@ -482,6 +480,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   const [bindTargetVersion, setBindTargetVersion] = useState('');
   const [bindEnvironment, setBindEnvironment] = useState<string>('');
   const [bindCustomNotes, setBindCustomNotes] = useState('');
+  const [newProjectEnvName, setNewProjectEnvName] = useState('');
 
   // Email Config Form State
   const [smtpServer, setSmtpServer] = useState(emailConfig.smtpServer || '');
@@ -513,7 +512,9 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   // still shows up as a selectable option so it isn't silently dropped when editing.
   const departmentOptions = Array.from(new Set([...orgDepartments, formDepartment].filter(Boolean)));
   const projectManagerOptions = Array.from(new Set([...orgProjectManagers, formOwnerName].filter(Boolean)));
-  const environmentOptions = Array.from(new Set([...orgDeploymentEnvironments, bindEnvironment].filter(Boolean)));
+  const environmentOptions = Array.from(
+    new Set([...(activeProjectDetail?.deploymentEnvironments || []), bindEnvironment].filter(Boolean))
+  );
 
   // Filtered Projects
   const filteredProjects = projects.filter((p) => {
@@ -654,6 +655,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     if (!prodObj) return;
 
     const existingBindings = activeProjectDetail.productBindings || [];
+    const existingBinding = existingBindings.find((b) => b.productId === prodObj.id);
     const newBinding: ProjectProductBinding = {
       productId: prodObj.id,
       productName: prodObj.name,
@@ -662,7 +664,13 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
       targetVersion: bindTargetVersion.trim(),
       environment: bindEnvironment,
       customNotes: bindCustomNotes,
-      boundAt: new Date().toISOString(),
+      boundAt: existingBinding?.boundAt || new Date().toISOString(),
+      productCpe: prodObj.cpe,
+      autoScanEnabled: existingBinding?.autoScanEnabled ?? true,
+      scanIntervalMinutes: existingBinding?.scanIntervalMinutes ?? 1440,
+      lastScannedAt: existingBinding?.lastScannedAt,
+      detectedCveCount: existingBinding?.detectedCveCount ?? 0,
+      activeAlertCount: existingBinding?.activeAlertCount ?? 0,
     };
 
     const updatedProductIds = Array.from(new Set([...activeProjectDetail.productIds, prodObj.id]));
@@ -722,6 +730,81 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
       }
     } catch (err) {
       console.error('Failed to remove product binding:', err);
+    }
+  };
+
+  // Scans a single project's product binding (its specific target version) for CVEs via the
+  // per-binding NVD CPE match endpoint, rather than a global per-MonitoredProduct scan.
+  const [scanningBindingId, setScanningBindingId] = useState<string | null>(null);
+  const handleScanBinding = async (productId: string) => {
+    if (!activeProjectDetail) return;
+    setScanningBindingId(productId);
+    try {
+      const res = await fetch(`/api/projects/${activeProjectDetail.id}/bindings/${encodeURIComponent(productId)}/scan`, {
+        method: 'POST',
+      });
+      const result = await res.json();
+      if (res.ok) {
+        onRefreshData();
+        const refreshed = await fetch(`/api/projects`).then((r) => r.json());
+        const match = Array.isArray(refreshed) ? refreshed.find((p: Project) => p.id === activeProjectDetail.id) : null;
+        if (match) setActiveProjectDetail(match);
+        alert(`掃描完成：發現 ${result.detectedCveCount} 項 CVE，新增 ${result.alertsTriggered} 則警報。`);
+      } else {
+        alert(`掃描失敗：${result.error || '未知錯誤'}`);
+      }
+    } catch (err) {
+      console.error('Failed to scan project binding:', err);
+      alert('掃描失敗');
+    } finally {
+      setScanningBindingId(null);
+    }
+  };
+
+  // Per-project deployment environments (each customer/project may use a different set,
+  // e.g. DEV/SIT/UAT/PRD by default, so this is maintained on the Project itself rather
+  // than as a global system-wide setting).
+  const handleAddProjectEnvironment = async (name: string) => {
+    if (!activeProjectDetail || !name.trim()) return;
+    const trimmed = name.trim();
+    const existing = activeProjectDetail.deploymentEnvironments || [];
+    if (existing.includes(trimmed)) return;
+    const updatedEnvironments = [...existing, trimmed];
+
+    try {
+      const res = await fetch(`/api/projects/${activeProjectDetail.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deploymentEnvironments: updatedEnvironments }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setActiveProjectDetail(updated);
+        onRefreshData();
+      }
+    } catch (err) {
+      console.error('Failed to add project deployment environment:', err);
+    }
+  };
+
+  const handleRemoveProjectEnvironment = async (name: string) => {
+    if (!activeProjectDetail) return;
+    if (!confirm(`確定要移除此專案的部署環境「${name}」嗎？`)) return;
+    const updatedEnvironments = (activeProjectDetail.deploymentEnvironments || []).filter((e) => e !== name);
+
+    try {
+      const res = await fetch(`/api/projects/${activeProjectDetail.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deploymentEnvironments: updatedEnvironments }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setActiveProjectDetail(updated);
+        onRefreshData();
+      }
+    } catch (err) {
+      console.error('Failed to remove project deployment environment:', err);
     }
   };
 
@@ -1186,7 +1269,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 onClick={() => {
                   setBindProductId(products[0]?.id || '');
                   setBindTargetVersion('');
-                  setBindEnvironment(orgDeploymentEnvironments[0] || '');
+                  setBindEnvironment(prj.deploymentEnvironments?.[0] || '');
                   setBindingModalOpen(true);
                 }}
                 className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center space-x-1.5 transition-colors shadow-2xs"
@@ -1194,6 +1277,63 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 <Plus className="w-4 h-4" />
                 <span>新增產品與特定版本套用</span>
               </button>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+              <div>
+                <h4 className="text-xs font-extrabold text-slate-800">此專案之部署環境清單</h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  各客戶/專案所使用的環境不盡相同，請於此自行維護（預設 DEV / SIT / UAT / PRD），供上方「部署環境」選單使用。
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {(prj.deploymentEnvironments || []).map((env) => (
+                  <span
+                    key={env}
+                    className="inline-flex items-center space-x-1.5 pl-2.5 pr-1.5 py-1 rounded-lg bg-white border border-slate-300 text-xs font-bold text-slate-700"
+                  >
+                    <span>{env}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveProjectEnvironment(env)}
+                      className="p-0.5 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-600"
+                      title={`移除 ${env}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+                {(prj.deploymentEnvironments || []).length === 0 && (
+                  <span className="text-[11px] text-slate-400">尚未設定任何部署環境</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newProjectEnvName}
+                  onChange={(e) => setNewProjectEnvName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleAddProjectEnvironment(newProjectEnvName);
+                      setNewProjectEnvName('');
+                    }
+                  }}
+                  placeholder="輸入新的部署環境名稱，例如 DR"
+                  className="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                />
+                <button
+                  type="button"
+                  disabled={!newProjectEnvName.trim()}
+                  onClick={() => {
+                    handleAddProjectEnvironment(newProjectEnvName);
+                    setNewProjectEnvName('');
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-slate-700 hover:bg-slate-800 text-white font-bold text-xs flex items-center space-x-1.5 transition-colors disabled:opacity-50 shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>新增環境</span>
+                </button>
+              </div>
             </div>
 
             {prjProducts.length === 0 ? (
@@ -1225,10 +1365,20 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
 
                         <div className="flex items-center space-x-1.5">
                           <button
+                            onClick={() => handleScanBinding(p.id)}
+                            disabled={scanningBindingId === p.id}
+                            className="px-2.5 py-1 rounded-lg text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 flex items-center space-x-1 transition-colors disabled:opacity-50"
+                            title="立即掃描此套用產品之 CVE 弱點"
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 text-emerald-600 ${scanningBindingId === p.id ? 'animate-spin' : ''}`} />
+                            <span>{scanningBindingId === p.id ? '掃描中…' : '立即掃描'}</span>
+                          </button>
+
+                          <button
                             onClick={() => {
                               setBindProductId(p.id);
                               setBindTargetVersion(binding?.targetVersion || '');
-                              setBindEnvironment(binding?.environment || orgDeploymentEnvironments[0] || '');
+                              setBindEnvironment(binding?.environment || prj.deploymentEnvironments?.[0] || '');
                               setBindCustomNotes(binding?.customNotes || '');
                               setBindingModalOpen(true);
                             }}
@@ -1270,8 +1420,11 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                       )}
 
                       <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-200/60">
-                        <span>CPE 關鍵字: {p.cpeKeyword}</span>
-                        <span>偵測漏洞: {p.detectedCveCount} 個</span>
+                        <span>CPE: {binding?.productCpe || p.cpeKeyword || '尚無 CPE 對照'}</span>
+                        <span>
+                          偵測漏洞: {binding?.detectedCveCount ?? 0} 個
+                          {binding?.lastScannedAt ? `（上次掃描: ${new Date(binding.lastScannedAt).toLocaleString('zh-TW')}）` : '（尚未掃描）'}
+                        </span>
                       </div>
                     </div>
                   );
@@ -2130,7 +2283,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     ))}
                   </select>
                   <p className="text-[10px] text-slate-400 mt-1">
-                    可於「系統管理與設定中心 → 組織清單管理」新增自訂部署環境。
+                    可於上方「使用產品清單」頁籤的「此專案之部署環境清單」新增自訂部署環境。
                   </p>
                 </div>
 

@@ -125,6 +125,12 @@ export interface ProjectProductBinding {
   environment?: string;
   customNotes?: string;
   boundAt?: string;
+  productCpe?: string; // 從全域產品目錄擷取的基礎 CPE（版本萬用字元），供掃描比對使用
+  autoScanEnabled?: boolean;
+  scanIntervalMinutes?: number;
+  lastScannedAt?: string;
+  detectedCveCount?: number;
+  activeAlertCount?: number;
 }
 
 export interface Project {
@@ -138,6 +144,7 @@ export interface Project {
   secondaryContacts?: string[];
   productIds: string[];
   productBindings?: ProjectProductBinding[]; // 個別套用到專案之產品與特定版本
+  deploymentEnvironments?: string[]; // 此專案可用的部署環境清單（各客戶/專案不同，於專案內自行維護，預設 DEV/SIT/UAT/PRD）
   notifyEmail: boolean;
   notifyFrequency?: NotificationFrequency; // 個別專案通知頻率
   versionNotifyEnabled?: boolean;

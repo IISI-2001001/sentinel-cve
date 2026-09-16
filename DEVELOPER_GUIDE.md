@@ -44,10 +44,10 @@ Spring Boot app（`java-backend/` / `sentinel-cve-server.jar`）
 | `src/types.ts` | 前後端共用 TypeScript 型別，包含 CVE、產品、專案、通知、工單與排程。 |
 | `src/components/Navbar.tsx` | 頂部導覽、掃描快捷鍵、未讀警報與 CVE 開啟。 |
 | `src/components/Dashboard.tsx` | 總覽 KPI（含由專案管理頁移入的「專案管理總覽指標」4 張卡片）、弱點分佈、重點產品狀態、最新 CVE/Alert feed。無法連上資料庫時顯示連線失敗提示 banner。 |
-| `src/components/ProjectManager.tsx` | 專案 CRUD、產品綁定、版本矩陣、CVE 清單、獨立通知頻率、Teams Webhook、手動通知、工單生命週期與結案區。 |
-| `src/components/SystemManager.tsx` | 系統管理與設定中心：全域掃描排程、CPE 對照管理、組織清單管理、NVD API Key、資料庫連線設定、稽核日誌。Teams Webhook 正式流程不在此設定，而在各專案設定。 |
+| `src/components/ProjectManager.tsx` | 專案 CRUD、產品綁定（含各專案自維護的部署環境清單）、版本矩陣、CVE 清單、獨立通知頻率、Teams Webhook、手動通知、工單生命週期與結案區。 |
+| `src/components/SystemManager.tsx` | 系統管理與設定中心：全域掃描排程、CPE 對照管理、組織清單管理（部門/專案負責人）、NVD API Key、資料庫連線設定、稽核日誌。Teams Webhook 正式流程不在此設定，而在各專案設定。 |
 | `src/components/CpeManager.tsx` | 「產品管理」分頁：檢視/手動編輯/刪除 `product_cpe_cache` 快取項目，並可對單一產品或全部項目觸發 NVD CPE 重新查詢。 |
-| `src/components/OrgDirectoryManager.tsx` | 組織清單管理：維護部門/單位清單，供專案綁定歸屬部門使用。 |
+| `src/components/OrgDirectoryManager.tsx` | 組織清單管理：維護部門、專案負責人清單，供專案綁定使用。（部署環境清單不在此維護，改於各專案自身頁面內管理，見下方 §5.2 末段。） |
 | `src/components/NvdApiKeyManager.tsx` | NVD API Key 管理：設定/測試 `NVD_API_KEY`，提升 NVD CVE/CPE 查詢速率限制。 |
 | `src/components/DbConnectionManager.tsx` | 資料庫連線管理：於 UI 中設定/測試 PostgreSQL 連線字串，寫入 `java-backend/config/db.properties`，套用需重啟後端。 |
 | `src/components/SystemLogs.tsx` | 稽核日誌顯示、狀態與類型篩選。 |
@@ -103,7 +103,16 @@ Spring Boot 啟動時，`SentinelCveApplication` 會透過 `StateService.initAnd
 - 管理者可在「系統管理與設定中心 → 產品管理」（`CpeManager.tsx`）手動刷新單一產品、批次刷新全部（`/api/cpe-cache/refresh-all`，與 `SchedulerService` 的 CPE 自動更新排程呼叫同一函式）、手動新增/覆寫或刪除快取項目。
 - 此快取只影響 CVE 查詢時使用的 CPE 字串，**不會**建立或修改 `MonitoredProduct` 記錄本身。
 
-### 5.2 版本來源選擇
+### 5.2 部署環境（依專案維護）
+
+`deployment_environments` **不是**全域資料表，而是 `Project` 物件上的 `deploymentEnvironments: string[]` 欄位（與 `data JSONB` 一起整批存取，沒有獨立 SQL 表、也沒有 `project_id` 外鍵關聯的獨立資料列）。原因是不同客戶/專案所需的部署環境不同（例如某些專案沒有 UAT、某些專案有額外的 DR 環境），環境清單天生應該「歸屬」於單一專案，因此設計上直接把它當成專案的一個屬性存放，而不是像 `departments`／`project_managers` 一樣獨立成全域對照表：
+
+- 新建專案時（`ProjectController` 的 `POST /api/projects`），若未帶 `deploymentEnvironments`，會預設 seed `["DEV", "SIT", "UAT", "PRD"]`。
+- 之後可透過 `PUT /api/projects/:id`（body 帶 `deploymentEnvironments` 陣列）新增/移除環境；前端在 `ProjectManager.tsx` 的「使用產品清單」頁籤內提供「此專案之部署環境清單」UI 區塊做管理。
+- 「使用產品清單」的產品版本套用表單（`ProjectProductBinding.environment`）之下拉選單只讀取**該專案自己**的 `deploymentEnvironments`，不再讀取全域清單。
+- 這與舊設計（`OrgDirectoryController` 下的全域 `deployment_environments` 表 + `/api/org-directory/environments/*`）不同；該表與端點已移除，`OrgDirectoryController` 目前只維護 `departments`／`project_managers`。
+
+### 5.3 版本來源選擇
 
 `resolveSourceType()` 依明確 `sourceType` 與產品 metadata 決定 Provider：
 
@@ -118,7 +127,7 @@ Spring Boot 啟動時，`SentinelCveApplication` 會透過 `StateService.initAnd
 
 `stableVersion()` 排除 alpha、beta、preview、pre、rc、snapshot 與 nightly。`compareVersions()` 以數字版本段比較；非標準廠商版號需寫專屬 adapter，不應猜測。
 
-### 5.3 更新判斷
+### 5.4 更新判斷
 
 `applyVersionResult()` 寫入 `latestVersion`、`latestSecureVersion`、來源 URL、查詢時間與信心等級。目前的更新判斷為：
 
@@ -248,7 +257,7 @@ Rule 必須啟用，且需符合：
 | 模組 | Controller/Service | 用途 |
 |---|---|---|
 | CPE 對照管理 | `CpeCacheController` / `CpeCacheService` | 管理 `product_cpe_cache`，見 §5.1；支援手動/排程自動刷新。 |
-| 組織清單管理 | `OrgDirectoryController` | 維護部門（`/departments`）、專案負責人（`/project-managers`）、部署環境（`/environments`）清單，供專案綁定使用。 |
+| 組織清單管理 | `OrgDirectoryController` | 維護部門（`/departments`）、專案負責人（`/project-managers`）清單，供專案綁定使用。部署環境改為各專案自行維護（`Project.deploymentEnvironments`），見 §5.2。 |
 | NVD API Key | `NvdConfigController`（`/api/nvd/config`, `/api/nvd/test`） | 設定/測試 `NVD_API_KEY`，用於提升 NVD CVE/CPE 查詢速率限制；對外回傳布林值表示 key 是否存在，不回傳明文。 |
 | 資料庫連線管理 | `DbConfigController`（`/api/system/db-config`） | 見 §4；於 UI 設定/測試 PostgreSQL 連線並寫入 `config/db.properties`，套用需重啟後端。 |
 | Email / Teams 設定 | `EmailConfigController` / `TeamsConfigController` | 全域 SMTP 與 Teams Webhook 設定，供 `MailService`/`WebhookDispatchService` 使用（專案層級的 Teams 通知另見 §8）。 |
@@ -267,7 +276,7 @@ Rule 必須啟用，且需符合：
 | Alerts/rules | `/api/alerts*`, `/api/rules*`, `/api/webhooks*` |
 | CPE 對照快取 | `GET /api/cpe-cache`, `POST /api/cpe-cache/refresh`, `POST /api/cpe-cache/refresh-all`, `POST /api/cpe-cache`（手動存入）, `DELETE /api/cpe-cache/:productName` |
 | NVD 設定 | `GET/PUT /api/nvd/config`, `POST /api/nvd/test` |
-| 組織清單 | `GET /api/org-directory`, `POST/DELETE /api/org-directory/departments/*`, `/project-managers/*`, `/environments/*` |
+| 組織清單 | `GET /api/org-directory`, `POST/DELETE /api/org-directory/departments/*`, `/project-managers/*`（部署環境改由 `PUT /api/projects/:id` 的 `deploymentEnvironments` 欄位維護，見 §5.2） |
 | 資料庫連線設定 | `GET/PUT /api/system/db-config`, `POST /api/system/db-config/test` |
 | Email / Teams 設定 | `GET/PUT /api/email/config`, `POST /api/email/test`；`GET/PUT /api/teams/config`, `POST /api/teams/test`（全域設定，專案層級 Teams 通知走 Project Teams 分組） |
 | Logs | `GET /api/logs` |

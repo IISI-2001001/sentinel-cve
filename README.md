@@ -35,7 +35,8 @@
   * 依產品名稱自動向 NVD CPE Dictionary 查詢並快取對應的 vendor:product CPE 識別碼（版本以萬用字元表示），供資產版本比對使用。
   * 可設定 NVD API Key 以提升呼叫速率上限（無 Key 約 5 requests/30s，有 Key 約 50 requests/30s），未設定時以匿名方式呼叫。
   * 支援獨立的 **CPE 對照自動更新排程**（於「系統管理 > ⏱️ 自動排程」設定間隔），定期重新查詢已快取產品是否有新發布的 CPE 識別碼；亦可於「產品管理」頁面手動觸發「確認所有產品是否有新 CPE」立即檢查。
-* **組織清單管理**：於「系統管理 > 🏢 組織清單管理」維護「所屬部門」、「專案經理」與「部署環境」三份名單（部署環境預設 DEV/SIT/UAT/PRD，可依需求動態新增），「專案管理」的新增/編輯專案表單與「使用產品清單」的產品版本套用表單即可以下拉選單方式選取，避免手動輸入造成的名稱不一致。
+* **組織清單管理**：於「系統管理 > 🏢 組織清單管理」維護「所屬部門」與「專案經理」兩份全域名單，「專案管理」的新增/編輯專案表單即可以下拉選單方式選取，避免手動輸入造成的名稱不一致。
+* **專案部署環境清單**：每個專案的「使用產品清單」頁籤內可自行維護「部署環境」清單（新建專案預設 DEV/SIT/UAT/PRD，可依專案需求動態新增/移除），供該專案的產品版本套用表單使用；因不同客戶/專案所需環境不同，此清單刻意採「專案層級」維護，不設於系統管理的全域設定。
 * **自動閉環聯防與告警**：
   * 支援排程定時自動比對資產、自動生成資安處置工單。
   * 即時發送具備 MessageCard 格式之 MS Teams Webhook 通知與企業 Email 派報。
@@ -95,7 +96,7 @@ SentinelCVE 採用 **Full-Stack (Java 21/Spring Boot 3 + React/Vite)** 一體化
 * **模組劃分 (`java-backend/src/main/java/com/sentinelcve/`)**：
   * `controller/*`：REST API endpoints（`/api/dashboard/stats`, `/api/cves`, `/api/products`, `/api/projects`, `/api/tickets`, `/api/schedule/*`, `/api/system/*`, `/api/system/db-config`, `/api/cpe-cache/*`, `/api/nvd/*`, `/api/org-directory/*` 等）。
   * `service/*`：核心業務邏輯，包含 `ScanService`（NVD/OSV 檢索與版本比對）、`ProductProviderService`（NVD CPE 查詢）、`CpeCacheService`（批次檢查已快取產品是否有新發布 CPE，供手動觸發與排程共用）、`MailService`（動態 SMTP 寄信）、`WebhookDispatchService`（Teams/Slack/自訂 Webhook）、`AlertRuleEngineService`（告警規則引擎）、`SchedulerService`（`@Scheduled` 背景排程，含掃描排程與 CPE 對照自動更新排程）、`ProjectDigestService`（專案摘要通知）。
-  * `db/PersistenceRepository.java` + `config/DataSourceConfig.java`：應用程式狀態（監控產品、CVE 資料庫、警報規則、通知、Webhook、稽核日誌、專案、工單、CPE 快取、NVD/Email/Teams/排程設定）全部以 PostgreSQL 儲存，每個集合對應一張資料表，主要欄位另外抽出做索引（如 `severity`、`cisa_kev`、`status`），完整物件則存於 `data JSONB` 欄位（透過 `PGobject` 序列化），服務啟動時整批載入記憶體、每次異動即以 `@Async` 方式整批寫回資料庫（Transaction 包裹，確保一致性）。另有 `product_cpe_cache`、`departments`、`project_managers`、`deployment_environments` 四張獨立維運表格，採一般欄位（非 JSONB）直接 CRUD，不隨 AppState 整批快照寫回，供「CPE 對照管理」與「組織清單管理」頁面即時查詢/新增/刪除使用；其中 `deployment_environments` 於服務首次啟動時自動 seed `DEV`/`SIT`/`UAT`/`PRD` 四筆預設值。
+  * `db/PersistenceRepository.java` + `config/DataSourceConfig.java`：應用程式狀態（監控產品、CVE 資料庫、警報規則、通知、Webhook、稽核日誌、專案、工單、CPE 快取、NVD/Email/Teams/排程設定）全部以 PostgreSQL 儲存，每個集合對應一張資料表，主要欄位另外抽出做索引（如 `severity`、`cisa_kev`、`status`），完整物件則存於 `data JSONB` 欄位（透過 `PGobject` 序列化），服務啟動時整批載入記憶體、每次異動即以 `@Async` 方式整批寫回資料庫（Transaction 包裹，確保一致性）。另有 `product_cpe_cache`、`departments`、`project_managers` 三張獨立維運表格，採一般欄位（非 JSONB）直接 CRUD，不隨 AppState 整批快照寫回，供「CPE 對照管理」與「組織清單管理」頁面即時查詢/新增/刪除使用；部署環境則不建立獨立全域資料表，而是以 `deploymentEnvironments` 欄位存於各專案自身的 JSONB 物件中（新建專案預設 seed `DEV`/`SIT`/`UAT`/`PRD`），確保每個專案可獨立維護自己的部署環境清單。
   * `model/*`：與前端 `src/types.ts` 對應之 Java Model（Jackson camelCase 序列化）。
 
 ### 資料流與背景排程 Worker
