@@ -480,6 +480,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   const [bindTargetVersion, setBindTargetVersion] = useState('');
   const [bindEnvironment, setBindEnvironment] = useState<string>('');
   const [bindCustomNotes, setBindCustomNotes] = useState('');
+  const [isEditingBinding, setIsEditingBinding] = useState(false);
   const [newProjectEnvName, setNewProjectEnvName] = useState('');
 
   // Email Config Form State
@@ -1352,12 +1353,13 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   setBindProductId(products[0]?.id || '');
                   setBindTargetVersion('');
                   setBindEnvironment('');
+                  setIsEditingBinding(false);
                   setBindingModalOpen(true);
                 }}
                 className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center space-x-1.5 transition-colors shadow-2xs"
               >
                 <Plus className="w-4 h-4" />
-                <span>新增產品與特定版本套用</span>
+                <span>新增產品</span>
               </button>
             </div>
 
@@ -1366,94 +1368,111 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 <Boxes className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                 <p className="text-xs font-semibold text-slate-700">該專案尚未綁定任何監控產品</p>
                 <p className="text-[11px] text-slate-400 mt-1">
-                  點擊上方【新增產品與特定版本套用】選取產品與指定版號
+                  點擊上方【新增產品】選取產品與指定版號
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {prjProducts.map((p) => {
-                  const binding = (prj.productBindings || []).find((b) => b.productId === p.id);
-                  const effectiveVersion = binding?.targetVersion || p.currentVersion || '未指定版本';
+              <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
+                    <tr>
+                      <th className="px-4 py-3">產品名稱與供應商</th>
+                      <th className="px-4 py-3">套用版本</th>
+                      <th className="px-4 py-3">部署環境</th>
+                      <th className="px-4 py-3">CPE 對照</th>
+                      <th className="px-4 py-3">偵測漏洞 / 上次掃描</th>
+                      <th className="px-4 py-3">備註</th>
+                      <th className="px-4 py-3 text-right">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 bg-white">
+                    {prjProducts.map((p) => {
+                      const binding = (prj.productBindings || []).find((b) => b.productId === p.id);
+                      const effectiveVersion = binding?.targetVersion || p.currentVersion || '未指定版本';
 
-                  return (
-                    <div
-                      key={p.id}
-                      className="bg-slate-50 border border-slate-200 rounded-2xl p-4 shadow-2xs hover:border-blue-300 transition-all space-y-3"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="space-y-1">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            {p.vendor || '通用供應商'}
-                          </span>
-                          <h4 className="text-sm font-extrabold text-slate-900">{p.name}</h4>
-                        </div>
+                      return (
+                        <tr key={p.id} className="hover:bg-slate-50/80 transition-colors align-top">
+                          <td className="px-4 py-3.5">
+                            <div className="font-extrabold text-slate-900 text-sm">{p.name}</div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                              {p.vendor || '通用供應商'}
+                            </span>
+                          </td>
 
-                        <div className="flex items-center space-x-1.5">
-                          <button
-                            onClick={() => handleScanBinding(p.id)}
-                            disabled={scanningBindingId === p.id}
-                            className="px-2.5 py-1 rounded-lg text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 flex items-center space-x-1 transition-colors disabled:opacity-50"
-                            title="立即掃描此套用產品之 CVE 弱點"
-                          >
-                            <RefreshCw className={`w-3.5 h-3.5 text-emerald-600 ${scanningBindingId === p.id ? 'animate-spin' : ''}`} />
-                            <span>{scanningBindingId === p.id ? '掃描中…' : '立即掃描'}</span>
-                          </button>
+                          <td className="px-4 py-3.5">
+                            <span className="font-mono font-bold text-blue-700 text-xs">{effectiveVersion}</span>
+                          </td>
 
-                          <button
-                            onClick={() => {
-                              setBindProductId(p.id);
-                              setBindTargetVersion(binding?.targetVersion || '');
-                              setBindEnvironment(binding?.environment || '');
-                              setBindCustomNotes(binding?.customNotes || '');
-                              setBindingModalOpen(true);
-                            }}
-                            className="px-2.5 py-1 rounded-lg text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 flex items-center space-x-1 transition-colors"
-                            title="編輯套用版本與部署環境"
-                          >
-                            <Edit2 className="w-3.5 h-3.5 text-blue-600" />
-                            <span>編輯版本</span>
-                          </button>
+                          <td className="px-4 py-3.5">
+                            <span className="font-bold text-slate-800 text-xs">
+                              {binding?.environment || '未指定環境'}
+                            </span>
+                          </td>
 
-                          <button
-                            onClick={() => handleRemoveProductBinding(p.id)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                            title="解除專案套用"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
+                          <td className="px-4 py-3.5">
+                            <span className="text-[11px] text-slate-500 font-mono">
+                              {binding?.productCpe || p.cpeKeyword || '尚無 CPE 對照'}
+                            </span>
+                          </td>
 
-                      <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
-                        <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                          <span className="text-[10px] text-slate-400 block font-semibold">專案特定套用版本</span>
-                          <span className="font-mono font-bold text-blue-700 text-xs">{effectiveVersion}</span>
-                        </div>
+                          <td className="px-4 py-3.5">
+                            <div className="text-[11px] text-slate-500">
+                              <span className="font-bold text-slate-700">{binding?.detectedCveCount ?? 0} 個</span>
+                              <br />
+                              {binding?.lastScannedAt ? new Date(binding.lastScannedAt).toLocaleString('zh-TW') : '尚未掃描'}
+                            </div>
+                          </td>
 
-                        <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                          <span className="text-[10px] text-slate-400 block font-semibold">部署環境</span>
-                          <span className="font-bold text-slate-800 text-xs">
-                            {binding?.environment || '未指定環境'}
-                          </span>
-                        </div>
-                      </div>
+                          <td className="px-4 py-3.5">
+                            {binding?.customNotes ? (
+                              <span className="text-[11px] text-slate-600">{binding.customNotes}</span>
+                            ) : (
+                              <span className="text-[11px] text-slate-300">—</span>
+                            )}
+                          </td>
 
-                      {binding?.customNotes && (
-                        <p className="text-[11px] text-slate-600 bg-white p-2 rounded-lg border border-slate-200">
-                          <span className="font-bold text-slate-500">備註:</span> {binding.customNotes}
-                        </p>
-                      )}
+                          <td className="px-4 py-3.5 text-right">
+                            <div className="flex items-center justify-end space-x-1.5">
+                              <button
+                                onClick={() => handleScanBinding(p.id)}
+                                disabled={scanningBindingId === p.id}
+                                className="px-2.5 py-1 rounded-lg text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 flex items-center space-x-1 transition-colors disabled:opacity-50"
+                                title="立即掃描此套用產品之 CVE 弱點"
+                              >
+                                <RefreshCw className={`w-3.5 h-3.5 text-emerald-600 ${scanningBindingId === p.id ? 'animate-spin' : ''}`} />
+                                <span>{scanningBindingId === p.id ? '掃描中…' : '立即掃描'}</span>
+                              </button>
 
-                      <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-200/60">
-                        <span>CPE: {binding?.productCpe || p.cpeKeyword || '尚無 CPE 對照'}</span>
-                        <span>
-                          偵測漏洞: {binding?.detectedCveCount ?? 0} 個
-                          {binding?.lastScannedAt ? `（上次掃描: ${new Date(binding.lastScannedAt).toLocaleString('zh-TW')}）` : '（尚未掃描）'}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
+                              <button
+                                onClick={() => {
+                                  setBindProductId(p.id);
+                                  setBindTargetVersion(binding?.targetVersion || '');
+                                  setBindEnvironment(binding?.environment || '');
+                                  setBindCustomNotes(binding?.customNotes || '');
+                                  setIsEditingBinding(true);
+                                  setBindingModalOpen(true);
+                                }}
+                                className="px-2.5 py-1 rounded-lg text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 flex items-center space-x-1 transition-colors"
+                                title="編輯套用版本與備註"
+                              >
+                                <Edit2 className="w-3.5 h-3.5 text-blue-600" />
+                                <span>編輯版本</span>
+                              </button>
+
+                              <button
+                                onClick={() => handleRemoveProductBinding(p.id)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                title="解除專案套用"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
@@ -2263,10 +2282,11 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   <label className="block font-bold text-slate-800 mb-1">選擇監控產品</label>
                   <select
                     value={bindProductId}
+                    disabled={isEditingBinding}
                     onChange={(e) => {
                       setBindProductId(e.target.value);
                     }}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
                   >
                     {products.map((p) => (
                       <option key={p.id} value={p.id}>
@@ -2274,6 +2294,11 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                       </option>
                     ))}
                   </select>
+                  {isEditingBinding && (
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      產品於新增套用時決定，如需變更請解除套用後重新新增。
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -2298,9 +2323,10 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   </label>
                   <select
                     required
+                    disabled={isEditingBinding}
                     value={bindEnvironment}
                     onChange={(e: any) => setBindEnvironment(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
                   >
                     {!bindEnvironment && <option value="">請選擇部署環境</option>}
                     {environmentOptions.map((env) => (
@@ -2310,7 +2336,9 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     ))}
                   </select>
                   <p className="text-[10px] text-slate-400 mt-1">
-                    可於上方「部署環境設定」頁籤新增自訂部署環境。
+                    {isEditingBinding
+                      ? '部署環境於新增套用時決定，如需變更請解除套用後重新新增。'
+                      : '可於上方「部署環境設定」頁籤新增自訂部署環境。'}
                   </p>
                 </div>
 

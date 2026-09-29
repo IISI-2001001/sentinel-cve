@@ -65,6 +65,7 @@ public class ProductProviderService {
         private String product;
         private String title;
         private boolean deprecated;
+        private boolean primary; // marks the admin-preferred vendor:product identity for scanning/display
     }
 
     /** Queries the NVD CPE Dictionary API's cpeMatchString filter (e.g. cpe:2.3:a:*:vertica) to

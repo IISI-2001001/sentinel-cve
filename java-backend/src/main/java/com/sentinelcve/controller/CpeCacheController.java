@@ -52,12 +52,33 @@ public class CpeCacheController {
             return ResponseEntity.badRequest().body(error("productName is required."));
         }
         try {
+            String priorPrimaryCpe = findPrimaryCpe(persistenceRepository.getCachedCpeCandidates(productName, LinkedHashMap.class));
             List<ProductProviderService.CpeLookupResult> candidates = productProviderService.searchCpeCandidates(productName);
+            if (priorPrimaryCpe != null) {
+                for (ProductProviderService.CpeLookupResult candidate : candidates) {
+                    if (priorPrimaryCpe.equals(candidate.getCpe())) {
+                        candidate.setPrimary(true);
+                        break;
+                    }
+                }
+            }
             persistenceRepository.saveCpeCandidates(productName, candidates);
             return ResponseEntity.ok(Map.of("productName", productName, "candidates", candidates));
         } catch (Exception err) {
             return ResponseEntity.status(502).body(error(err.getMessage() != null ? err.getMessage() : "NVD CPE 查詢失敗"));
         }
+    }
+
+    /** Finds the CPE string currently marked {@code primary=true} among cached candidates, if
+     * any — used to re-apply the marking after an NVD refresh overwrites the candidate array. */
+    private static String findPrimaryCpe(List<LinkedHashMap> candidates) {
+        if (candidates == null) return null;
+        for (LinkedHashMap candidate : candidates) {
+            if (Boolean.TRUE.equals(candidate.get("primary"))) {
+                return (String) candidate.get("cpe");
+            }
+        }
+        return null;
     }
 
     /**
@@ -110,6 +131,36 @@ public class CpeCacheController {
     public ResponseEntity<?> delete(@PathVariable String productName) {
         persistenceRepository.deleteCpeCacheEntry(productName);
         return ResponseEntity.ok(Map.of("success", true));
+    }
+
+    /** Marks one candidate CPE as the "primary" (preferred vendor) for a product name — used to
+     * decide which vendor:product identity the "使用產品清單" dropdown and CVE scanning default
+     * to when a single product name maps to multiple different vendor CPEs. Stored as a
+     * {@code primary} boolean directly on the matching candidate object inside the existing
+     * {@code candidates} JSONB array (no schema change needed). */
+    @SuppressWarnings("unchecked")
+    @PostMapping("/{productName}/primary")
+    public ResponseEntity<?> setPrimary(@PathVariable String productName, @RequestBody Map<String, Object> body) {
+        String cpe = asString(body.get("cpe"));
+        if (!hasText(cpe)) {
+            return ResponseEntity.badRequest().body(error("cpe is required."));
+        }
+        List<LinkedHashMap<String, Object>> candidates =
+            (List<LinkedHashMap<String, Object>>) (List<?>) persistenceRepository.getCachedCpeCandidates(productName, LinkedHashMap.class);
+        if (candidates == null || candidates.isEmpty()) {
+            return ResponseEntity.badRequest().body(error("找不到「" + productName + "」的 CPE 對照快取。"));
+        }
+        boolean found = false;
+        for (LinkedHashMap<String, Object> candidate : candidates) {
+            boolean isMatch = cpe.equals(candidate.get("cpe"));
+            candidate.put("primary", isMatch);
+            found = found || isMatch;
+        }
+        if (!found) {
+            return ResponseEntity.badRequest().body(error("指定的 CPE 不存在於目前的候選清單中。"));
+        }
+        persistenceRepository.saveCpeCandidates(productName, candidates);
+        return ResponseEntity.ok(Map.of("productName", productName, "candidates", candidates));
     }
 
     private static boolean hasText(String value) {
