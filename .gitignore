@@ -14,3 +14,4 @@ coverage/
 .vagrant/
 sentinel-cve-db/
 java-backend/config/
+start-local.bat
