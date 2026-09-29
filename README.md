@@ -238,21 +238,33 @@ vagrant halt
 
 直接於 `.env` 或環境變數設定既有 PostgreSQL 主機的 `DATABASE_URL`。
 
-準備好資料庫連線後，接續啟動前後端：
+準備好資料庫連線後，先建立本機環境變數檔（若尚未建立過）：
+
+```bash
+cp .env.example .env
+```
+
+再編輯 `.env`，依您選擇的方式設定 `DATABASE_URL`（格式為 `postgres://<帳號>:<密碼>@<主機>:<Port>/<資料庫名稱>`）：
+- 方式 A（本機 Docker 容器）：`.env.example` 內的預設值即可直接使用，無需修改。
+- 方式 B（Vagrant VM）：需將主機部分改為 VM 的私有網路 IP `192.168.100.20`（Port 仍為 `5432`）。
+- 方式 C（既有/外部 PostgreSQL）：改為該主機的實際連線資訊。
+
+接續啟動前後端：
 
 ```bash
 # 前端：安裝套件並啟動 Vite dev server（熱重載，預設 5173）
 npm install
 npm run dev
 
-# 後端：另開一個終端機，設定環境變數並啟動 Spring Boot（需 Java 21 + Maven）
+# 後端：另開一個終端機，啟動 Spring Boot（需 Java 21 + Maven）
+# 會自動讀取專案根目錄的 .env；若未建立 .env，也可改用 export 設定環境變數
 cd java-backend
-export DATABASE_URL="postgres://sentinel:sentinel@localhost:5432/sentinel_cve"
-export NVD_API_KEY="your_nvd_api_key_here"   # 選填，未設定則以匿名方式呼叫 NVD API
 mvn spring-boot:run
 ```
 
 後端啟動於 `http://localhost:8080`，會自動建立所需的資料表 (`CREATE TABLE IF NOT EXISTS`)，無需另外執行 migration。開發模式下前端 Vite dev server 與後端 API 為分離埠號，請自行設定 Vite proxy 或直接呼叫 `http://localhost:8080/api/*`。
+
+> 💡 **快速驗證**：前端載入後，若總覽儀表板（Dashboard）出現「資料庫未連線」提示 banner，代表後端無法連上 PostgreSQL，請依序檢查：(1) 資料庫本身是否已啟動（`docker ps` 或 `vagrant status`）、(2) `.env` 的 `DATABASE_URL` 主機/Port 是否正確、(3) 修改 `.env` 後是否已重新啟動後端服務（Spring Boot 只會在啟動時讀取一次環境變數）。
 
 ---
 
