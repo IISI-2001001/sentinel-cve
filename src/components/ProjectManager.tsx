@@ -59,7 +59,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   // Navigation level state: null = Level 1 (Summary List), Project = Level 2 (Project Detail & Settings)
   const [activeProjectDetail, setActiveProjectDetail] = useState<Project | null>(null);
   const [activeDetailSubTab, setActiveDetailSubTab] = useState<
-    'general' | 'notifications' | 'products' | 'version-matrix' | 'vulnerabilities'
+    'general' | 'environments' | 'notifications' | 'products' | 'version-matrix' | 'vulnerabilities'
   >('general');
 
   // CVE List State
@@ -1136,6 +1136,18 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveDetailSubTab('environments')}
+            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              activeDetailSubTab === 'environments'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Server className="w-4 h-4" />
+            <span>2. 部署環境設定 ({(prj.deploymentEnvironments || []).length})</span>
+          </button>
+
+          <button
             onClick={() => setActiveDetailSubTab('products')}
             className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
               activeDetailSubTab === 'products'
@@ -1144,7 +1156,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
             }`}
           >
             <Layers className="w-4 h-4" />
-            <span>2. 使用產品清單 ({prjProducts.length})</span>
+            <span>3. 使用產品清單 ({prjProducts.length})</span>
           </button>
 
           <button
@@ -1156,7 +1168,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
             }`}
           >
             <Bell className="w-4 h-4" />
-            <span>3. 通知管道與頻率設定</span>
+            <span>4. 通知管道與頻率設定</span>
           </button>
 
           <button
@@ -1168,7 +1180,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
             }`}
           >
             <RefreshCw className="w-4 h-4" />
-            <span>4. 產品版本與升級對照 ({prjProducts.length})</span>
+            <span>5. 產品版本與升級對照 ({prjProducts.length})</span>
           </button>
 
           <button
@@ -1180,7 +1192,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
             }`}
           >
             <ShieldAlert className="w-4 h-4" />
-            <span>5. 專案資產弱點列表 ({prjCves.length})</span>
+            <span>6. 專案資產弱點列表 ({prjCves.length})</span>
           </button>
         </div>
 
@@ -1252,40 +1264,20 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
         )}
 
         {/* SUB TAB 2: Products & Target Version Bindings (使用產品清單) */}
-        {activeDetailSubTab === 'products' && (
+        {/* SUB TAB 2: Deployment Environments */}
+        {activeDetailSubTab === 'environments' && (
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-900 flex items-center space-x-2">
-                  <Layers className="w-4 h-4 text-blue-600" />
-                  <span>套用到此專案之資產產品與特定版本</span>
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  可為不同專案個別指定產品的「目標套用版本號」、「部署環境」與「自訂備註」
-                </p>
-              </div>
-
-              <button
-                onClick={() => {
-                  setBindProductId(products[0]?.id || '');
-                  setBindTargetVersion('');
-                  setBindEnvironment(prj.deploymentEnvironments?.[0] || '');
-                  setBindingModalOpen(true);
-                }}
-                className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center space-x-1.5 transition-colors shadow-2xs"
-              >
-                <Plus className="w-4 h-4" />
-                <span>新增產品與特定版本套用</span>
-              </button>
+            <div className="border-b border-slate-200 pb-3">
+              <h3 className="text-sm font-extrabold text-slate-900 flex items-center space-x-2">
+                <Server className="w-4 h-4 text-blue-600" />
+                <span>此專案之部署環境清單</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                各客戶/專案所使用的環境不盡相同，請於此自行維護（預設 DEV / SIT / UAT / PRD），供「使用產品清單」頁籤中的「部署環境」選單使用。
+              </p>
             </div>
 
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
-              <div>
-                <h4 className="text-xs font-extrabold text-slate-800">此專案之部署環境清單</h4>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  各客戶/專案所使用的環境不盡相同，請於此自行維護（預設 DEV / SIT / UAT / PRD），供上方「部署環境」選單使用。
-                </p>
-              </div>
               <div className="flex flex-wrap items-center gap-2">
                 {(prj.deploymentEnvironments || []).map((env) => (
                   <span
@@ -1334,6 +1326,35 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   <span>新增環境</span>
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {activeDetailSubTab === 'products' && (
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900 flex items-center space-x-2">
+                  <Layers className="w-4 h-4 text-blue-600" />
+                  <span>套用到此專案之資產產品與特定版本</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  可為不同專案個別指定產品的「目標套用版本號」、「部署環境」與「自訂備註」
+                </p>
+              </div>
+
+              <button
+                onClick={() => {
+                  setBindProductId(products[0]?.id || '');
+                  setBindTargetVersion('');
+                  setBindEnvironment(prj.deploymentEnvironments?.[0] || '');
+                  setBindingModalOpen(true);
+                }}
+                className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center space-x-1.5 transition-colors shadow-2xs"
+              >
+                <Plus className="w-4 h-4" />
+                <span>新增產品與特定版本套用</span>
+              </button>
             </div>
 
             {prjProducts.length === 0 ? (
@@ -2283,7 +2304,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     ))}
                   </select>
                   <p className="text-[10px] text-slate-400 mt-1">
-                    可於上方「使用產品清單」頁籤的「此專案之部署環境清單」新增自訂部署環境。
+                    可於上方「部署環境設定」頁籤新增自訂部署環境。
                   </p>
                 </div>
 
