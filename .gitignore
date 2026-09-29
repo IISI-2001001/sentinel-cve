@@ -15,3 +15,7 @@ coverage/
 sentinel-cve-db/
 java-backend/config/
 start-local.bat
+stop-local.bat
+stop-local.ps1
+backend.pid
+frontend.pid
