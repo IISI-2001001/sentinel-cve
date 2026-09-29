@@ -1084,7 +1084,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
         )}
 
         {/* Project KPI & Status Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
               <span>綁定監控產品</span>
@@ -1114,6 +1114,24 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
 
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span>CVE 通知門檻</span>
+              <Bell className="w-4 h-4 text-amber-600" />
+            </div>
+            <div className="text-xl font-extrabold text-amber-700">CVSS ≥ {prj.notifyMinCvss ?? 7}</div>
+            <p className="text-[11px] text-slate-400 mt-0.5">低於門檻不觸發通知</p>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span>最高已知分數</span>
+              <ShieldAlert className="w-4 h-4 text-rose-600" />
+            </div>
+            <div className="text-xl font-extrabold text-rose-700">{maxProjectCvss > 0 ? maxProjectCvss.toFixed(1) : '無資料'}</div>
+            <p className="text-[11px] text-slate-400 mt-0.5">目前綁定資產最高風險分數</p>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
               <span>通知管道與頻率</span>
               <Clock className="w-4 h-4 text-emerald-600" />
             </div>
@@ -1137,7 +1155,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
             }`}
           >
             <UserCheck className="w-4 h-4" />
-            <span>1. 專案基本與成員負責人</span>
+            <span>1. 專案基本資訊</span>
           </button>
 
           <button
@@ -1222,47 +1240,32 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-2">
-                  <span className="text-xs font-bold text-slate-500">專案名稱與代號</span>
-                  <div className="flex items-center space-x-2">
-                    <span className="font-mono text-xs font-bold px-2 py-0.5 bg-blue-100 text-blue-800 rounded border border-blue-200">
-                      {prj.code}
-                    </span>
-                    <span className="text-base font-extrabold text-slate-900">{prj.name}</span>
-                  </div>
-                  <p className="text-xs text-slate-600">{prj.description || '無描述'}</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-2">
+                <span className="text-xs font-bold text-slate-500">專案Code與名稱</span>
+                <div className="flex items-center space-x-2">
+                  <span className="font-mono text-xs font-bold px-2 py-0.5 bg-blue-100 text-blue-800 rounded border border-blue-200">
+                    {prj.code}
+                  </span>
+                  <span className="text-base font-extrabold text-slate-900">{prj.name}</span>
                 </div>
+                <p className="text-xs text-slate-600">{prj.description || '無描述'}</p>
+              </div>
 
-                <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-2">
-                  <span className="text-xs font-bold text-slate-500">隸屬部門與事業群</span>
-                  <div className="text-sm font-bold text-slate-800 flex items-center space-x-2">
-                    <Building2 className="w-4 h-4 text-slate-500" />
-                    <span>{prj.department || '未定義部門'}</span>
-                  </div>
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-2">
+                <span className="text-xs font-bold text-slate-500">隸屬部門與事業群</span>
+                <div className="text-sm font-bold text-slate-800 flex items-center space-x-2">
+                  <Building2 className="w-4 h-4 text-slate-500" />
+                  <span>{prj.department || '未定義部門'}</span>
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-3">
-                  <span className="text-xs font-bold text-slate-500 flex items-center space-x-1">
-                    <UserCheck className="w-4 h-4 text-blue-600" />
-                    <span>主要 Responsible Owner</span>
-                  </span>
-
-                  <div className="text-sm font-extrabold text-slate-900">{prj.ownerName || '未指定負責人'}</div>
-                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200">
-                    <div className="rounded-lg bg-white border border-slate-200 p-2">
-                      <div className="text-[10px] font-bold text-slate-500">CVE 通知門檻</div>
-                      <div className="text-sm font-extrabold text-amber-700">CVSS ≥ {prj.notifyMinCvss ?? 7}</div>
-                    </div>
-                    <div className="rounded-lg bg-white border border-slate-200 p-2">
-                      <div className="text-[10px] font-bold text-slate-500">最高已知分數</div>
-                      <div className="text-sm font-extrabold text-rose-700">{maxProjectCvss > 0 ? maxProjectCvss.toFixed(1) : '無資料'}</div>
-                    </div>
-                  </div>
-                </div>
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-2">
+                <span className="text-xs font-bold text-slate-500 flex items-center space-x-1">
+                  <UserCheck className="w-4 h-4 text-blue-600" />
+                  <span>專案經理</span>
+                </span>
+                <div className="text-sm font-extrabold text-slate-900">{prj.ownerName || '未指定負責人'}</div>
               </div>
             </div>
           </div>
