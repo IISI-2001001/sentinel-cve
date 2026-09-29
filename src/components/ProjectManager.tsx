@@ -535,7 +535,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     setFormOwnerName('');
     setFormOwnerEmail('');
     setFormSecondary('');
-    setFormSelectedProducts(products.slice(0, 2).map((p) => p.id));
+    setFormSelectedProducts([]);
     setFormNotifyEmail(true);
     setFormNotifyMinCvss(7.0);
     setFormNotifyCisaKevOnly(false);
