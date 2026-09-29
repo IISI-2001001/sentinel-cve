@@ -650,6 +650,10 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
       alert('請輸入此專案特定套用版本號！');
       return;
     }
+    if (!bindEnvironment) {
+      alert('請選擇部署環境！');
+      return;
+    }
 
     const prodObj = products.find((p) => p.id === bindProductId);
     if (!prodObj) return;
@@ -1347,7 +1351,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 onClick={() => {
                   setBindProductId(products[0]?.id || '');
                   setBindTargetVersion('');
-                  setBindEnvironment(prj.deploymentEnvironments?.[0] || '');
+                  setBindEnvironment('');
                   setBindingModalOpen(true);
                 }}
                 className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center space-x-1.5 transition-colors shadow-2xs"
@@ -1399,7 +1403,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                             onClick={() => {
                               setBindProductId(p.id);
                               setBindTargetVersion(binding?.targetVersion || '');
-                              setBindEnvironment(binding?.environment || prj.deploymentEnvironments?.[0] || '');
+                              setBindEnvironment(binding?.environment || '');
                               setBindCustomNotes(binding?.customNotes || '');
                               setBindingModalOpen(true);
                             }}
@@ -2266,7 +2270,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   >
                     {products.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name} ({p.vendor || '通用'}) - 預設版號: {p.currentVersion || '1.0.0'}
+                        {p.name} ({p.vendor || '通用'})
                       </option>
                     ))}
                   </select>
@@ -2281,7 +2285,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     required
                     value={bindTargetVersion}
                     onChange={(e) => setBindTargetVersion(e.target.value)}
-                    placeholder="必填，例：6.5.0-generic 或 3.0.12"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
                   />
                   <p className="text-[10px] text-slate-400 mt-1">
@@ -2290,8 +2293,11 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-800 mb-1">部署環境 (Environment)</label>
+                  <label className="block font-bold text-slate-800 mb-1">
+                    部署環境 (Environment) <span className="text-rose-500">*</span>
+                  </label>
                   <select
+                    required
                     value={bindEnvironment}
                     onChange={(e: any) => setBindEnvironment(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
@@ -2314,7 +2320,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     type="text"
                     value={bindCustomNotes}
                     onChange={(e) => setBindCustomNotes(e.target.value)}
-                    placeholder="例：API Gateway 核心 Kernel 或 負載平衡器"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-600"
                   />
                 </div>
