@@ -30,6 +30,7 @@
   * **總覽儀表板 (Dashboard)**：全站受監控資產、警報數量、CISA KEV 警告、CVSS 分數統計圖表與即時 Feed 檢視。
   * **專案管理與工單中心 (Project Manager)**：專案團隊維護、產品版本與升級對照表 (Upgrade Matrix)、資安處置工單看板。
   * **系統管理與設定中心 (System Manager)**：集中管理「⏱️ 自動排程」、「📦 產品管理（`product_cpe_cache` 全域產品目錄，含 NVD CPE 自動/手動查詢與定期刷新）」、「🏢 組織清單管理」、「🔑 NVD API Key 管理」、「🗄️ 資料庫連線管理」、「✉️ 全域 Email SMTP」、「💬 MS Teams Webhook 通報」與「📋 系統稽核日誌」。
+    - `MailService`/`EmailConfigController` 為通用 SMTP 實作，不依賴任何特定郵件服務商；若公司內部郵件系統（如 Outlook/Exchange）無法申請 SMTP relay 或 Azure AD App Registration 權限，可改用第三方 SMTP 中繼服務（如 Brevo、SendGrid）取代，**完全不需修改程式碼**，僅需於此頁面更換 SMTP 主機/連接埠/帳密並以「SMTP 連線測試」驗證。詳細方案比較與設定步驟請參閱 [`EMAIL_SMTP_GUIDE.md`](EMAIL_SMTP_GUIDE.md)。
   * **系統說明與專業名詞手冊 (Documentation)**：完整收錄 CVE/CPE/CVSS 名詞解釋、NVD/CISA KEV/OSV/EPSS 權威數據源說明、4 種弱點查找與派單 SOP、自動化聯防管道與 FAQ。
 * **NVD CPE 對照引擎**：
   * 依產品名稱自動向 NVD CPE Dictionary 查詢並快取對應的 vendor:product CPE 識別碼（版本以萬用字元表示），供資產版本比對使用。
