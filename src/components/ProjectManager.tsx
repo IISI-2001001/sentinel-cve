@@ -35,6 +35,9 @@ import {
   Tag,
   CheckSquare,
   User,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from 'lucide-react';
 import { Project, MonitoredProduct, EmailNotificationConfig, Ticket, TicketStatus, TicketPriority, TicketCveInfo, ActionStep, ProjectProductBinding, CVEItem } from '../types';
 import { TicketDetailModal } from './TicketDetailModal';
@@ -61,6 +64,33 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   const [activeDetailSubTab, setActiveDetailSubTab] = useState<
     'general' | 'environments' | 'notifications' | 'products' | 'version-matrix' | 'vulnerabilities'
   >('general');
+
+  // "使用產品清單" tab: environment filter (tabs generated from project's deploymentEnvironments) + table sorting
+  const [productsEnvFilter, setProductsEnvFilter] = useState<string>('ALL');
+  type ProductsSortKey = 'name' | 'version' | 'environment' | 'cveCount' | 'lastScanned';
+  const [productsSortKey, setProductsSortKey] = useState<ProductsSortKey | null>(null);
+  const [productsSortDir, setProductsSortDir] = useState<'asc' | 'desc'>('asc');
+
+  const toggleProductsSort = (key: ProductsSortKey) => {
+    if (productsSortKey === key) {
+      setProductsSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setProductsSortKey(key);
+      setProductsSortDir('asc');
+    }
+  };
+
+  const renderProductsSortIcon = (key: ProductsSortKey) => {
+    if (productsSortKey !== key) {
+      return <ArrowUpDown className="w-3 h-3 text-slate-300" />;
+    }
+    return productsSortDir === 'asc' ? (
+      <ArrowUp className="w-3 h-3 text-blue-600" />
+    ) : (
+      <ArrowDown className="w-3 h-3 text-blue-600" />
+    );
+  };
+
 
   // CVE List State
   const [allCves, setAllCves] = useState<CVEItem[]>(propsCves || []);
@@ -1366,30 +1396,142 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               </button>
             </div>
 
-            {prjProducts.length === 0 ? (
-              <div className="p-8 text-center text-slate-500 border border-dashed border-slate-200 rounded-2xl">
-                <Boxes className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="text-xs font-semibold text-slate-700">該專案尚未綁定任何監控產品</p>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  點擊上方【新增產品】選取產品與指定版號
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
+            {/* Environment filter tabs: 全部 + one tab per project deployment environment */}
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+              <button
+                onClick={() => setProductsEnvFilter('ALL')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors border ${
+                  productsEnvFilter === 'ALL'
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                全部 ({prjProducts.length})
+              </button>
+              {(prj.deploymentEnvironments || []).map((env) => {
+                const envCount = prjProducts.filter((p) => {
+                  const binding = (prj.productBindings || []).find((b) => b.productId === p.id);
+                  return binding?.environment === env;
+                }).length;
+                return (
+                  <button
+                    key={env}
+                    onClick={() => setProductsEnvFilter(env)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors border ${
+                      productsEnvFilter === env
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    {env} ({envCount})
+                  </button>
+                );
+              })}
+            </div>
+
+            {(() => {
+              const envFilteredProducts = prjProducts.filter((p) => {
+                if (productsEnvFilter === 'ALL') return true;
+                const binding = (prj.productBindings || []).find((b) => b.productId === p.id);
+                return binding?.environment === productsEnvFilter;
+              });
+
+              const sortedProducts = [...envFilteredProducts].sort((a, b) => {
+                if (!productsSortKey) return 0;
+                const bindingA = (prj.productBindings || []).find((bd) => bd.productId === a.id);
+                const bindingB = (prj.productBindings || []).find((bd) => bd.productId === b.id);
+                let valA: string | number = '';
+                let valB: string | number = '';
+                switch (productsSortKey) {
+                  case 'name':
+                    valA = a.name.toLowerCase();
+                    valB = b.name.toLowerCase();
+                    break;
+                  case 'version':
+                    valA = (bindingA?.targetVersion || a.currentVersion || '').toLowerCase();
+                    valB = (bindingB?.targetVersion || b.currentVersion || '').toLowerCase();
+                    break;
+                  case 'environment':
+                    valA = (bindingA?.environment || '').toLowerCase();
+                    valB = (bindingB?.environment || '').toLowerCase();
+                    break;
+                  case 'cveCount':
+                    valA = bindingA?.detectedCveCount ?? 0;
+                    valB = bindingB?.detectedCveCount ?? 0;
+                    break;
+                  case 'lastScanned':
+                    valA = bindingA?.lastScannedAt ? new Date(bindingA.lastScannedAt).getTime() : 0;
+                    valB = bindingB?.lastScannedAt ? new Date(bindingB.lastScannedAt).getTime() : 0;
+                    break;
+                }
+                if (valA < valB) return productsSortDir === 'asc' ? -1 : 1;
+                if (valA > valB) return productsSortDir === 'asc' ? 1 : -1;
+                return 0;
+              });
+
+              if (prjProducts.length === 0) {
+                return (
+                  <div className="p-8 text-center text-slate-500 border border-dashed border-slate-200 rounded-2xl">
+                    <Boxes className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="text-xs font-semibold text-slate-700">該專案尚未綁定任何監控產品</p>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      點擊上方【新增產品】選取產品與指定版號
+                    </p>
+                  </div>
+                );
+              }
+
+              if (sortedProducts.length === 0) {
+                return (
+                  <div className="p-8 text-center text-slate-500 border border-dashed border-slate-200 rounded-2xl">
+                    <Boxes className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="text-xs font-semibold text-slate-700">此部署環境尚無套用產品</p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
                     <tr>
-                      <th className="px-4 py-3">產品名稱與供應商</th>
-                      <th className="px-4 py-3">套用版本</th>
-                      <th className="px-4 py-3">部署環境</th>
+                      <th className="px-4 py-3">
+                        <button onClick={() => toggleProductsSort('name')} className="flex items-center gap-1 hover:text-blue-700">
+                          <span>產品名稱</span>
+                          {renderProductsSortIcon('name')}
+                        </button>
+                      </th>
+                      <th className="px-4 py-3">
+                        <button onClick={() => toggleProductsSort('version')} className="flex items-center gap-1 hover:text-blue-700">
+                          <span>套用版本</span>
+                          {renderProductsSortIcon('version')}
+                        </button>
+                      </th>
+                      <th className="px-4 py-3">
+                        <button onClick={() => toggleProductsSort('environment')} className="flex items-center gap-1 hover:text-blue-700">
+                          <span>部署環境</span>
+                          {renderProductsSortIcon('environment')}
+                        </button>
+                      </th>
                       <th className="px-4 py-3">CPE 對照</th>
-                      <th className="px-4 py-3">偵測漏洞 / 上次掃描</th>
+                      <th className="px-4 py-3">
+                        <button onClick={() => toggleProductsSort('cveCount')} className="flex items-center gap-1 hover:text-blue-700">
+                          <span>偵測漏洞</span>
+                          {renderProductsSortIcon('cveCount')}
+                        </button>
+                      </th>
+                      <th className="px-4 py-3">
+                        <button onClick={() => toggleProductsSort('lastScanned')} className="flex items-center gap-1 hover:text-blue-700">
+                          <span>上次掃描</span>
+                          {renderProductsSortIcon('lastScanned')}
+                        </button>
+                      </th>
                       <th className="px-4 py-3">備註</th>
                       <th className="px-4 py-3 text-right">操作</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 bg-white">
-                    {prjProducts.map((p) => {
+                    {sortedProducts.map((p) => {
                       const binding = (prj.productBindings || []).find((b) => b.productId === p.id);
                       const effectiveVersion = binding?.targetVersion || p.currentVersion || '未指定版本';
 
@@ -1397,9 +1539,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                         <tr key={p.id} className="hover:bg-slate-50/80 transition-colors align-top">
                           <td className="px-4 py-3.5">
                             <div className="font-extrabold text-slate-900 text-sm">{p.name}</div>
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                              {p.vendor || '通用供應商'}
-                            </span>
                           </td>
 
                           <td className="px-4 py-3.5">
@@ -1419,11 +1558,13 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                           </td>
 
                           <td className="px-4 py-3.5">
-                            <div className="text-[11px] text-slate-500">
-                              <span className="font-bold text-slate-700">{binding?.detectedCveCount ?? 0} 個</span>
-                              <br />
+                            <span className="font-bold text-slate-700 text-[11px]">{binding?.detectedCveCount ?? 0} 個</span>
+                          </td>
+
+                          <td className="px-4 py-3.5">
+                            <span className="text-[11px] text-slate-500">
                               {binding?.lastScannedAt ? new Date(binding.lastScannedAt).toLocaleString('zh-TW') : '尚未掃描'}
-                            </div>
+                            </span>
                           </td>
 
                           <td className="px-4 py-3.5">
@@ -1477,7 +1618,8 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   </tbody>
                 </table>
               </div>
-            )}
+              );
+            })()}
           </div>
         )}
 
@@ -1689,7 +1831,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 {/* Metric summary banner */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-3.5 flex items-center justify-between">
-                    <div className="hidden">
+                    <div>
                       <span className="text-xs font-bold text-emerald-800 block">已是最新安全版本</span>
                       <span className="text-xs text-emerald-600">無修補升級需求</span>
                     </div>
@@ -1734,7 +1876,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   <table className="w-full text-left text-xs">
                     <thead className="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
                       <tr>
-                        <th className="px-4 py-3">產品名稱與供應商</th>
+                        <th className="px-4 py-3">產品名稱</th>
                         <th className="px-4 py-3">專案套用版本</th>
                         <th className="px-4 py-3">最新發行版本</th>
                         <th className="px-4 py-3">建議升級版本</th>
@@ -1760,9 +1902,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                           <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
                             <td className="px-4 py-3.5">
                               <div className="font-extrabold text-slate-900 text-sm">{p.name}</div>
-                              <div className="flex items-center space-x-2 text-[11px] text-slate-400 mt-0.5">
-                                <span className="font-semibold">{p.vendor || '通用'}</span>
-                                <span>•</span>
+                              <div className="text-[11px] text-slate-400 mt-0.5">
                                 <span>{p.category}</span>
                               </div>
                             </td>
@@ -2414,8 +2554,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                       </span>
                     </div>
                     <div className="text-slate-500 text-[11px] mt-1 flex items-center space-x-3">
-                      <span>供應商: {assignTarget.product.vendor || '通用'}</span>
-                      <span>•</span>
                       <span>涵蓋 CVE 漏洞數: {assignTarget.product.detectedCveCount} 個</span>
                     </div>
                   </div>
