@@ -36,11 +36,11 @@
   * 可設定 NVD API Key 以提升呼叫速率上限（無 Key 約 5 requests/30s，有 Key 約 50 requests/30s），未設定時以匿名方式呼叫。
   * 支援獨立的 **CPE 對照自動更新排程**（於「系統管理 > ⏱️ 自動排程」設定間隔），定期重新查詢已快取產品是否有新發布的 CPE 識別碼；亦可於「產品管理」頁面手動觸發「確認所有產品是否有新 CPE」立即檢查。
 * **全域產品目錄與專案套用產品（雙層架構）**：
-  * `product_cpe_cache` 是「所有客戶/專案可能用到的產品」全域目錄，於「系統管理 > 📦 產品管理」統一維護，每個產品皆有定期（或手動觸發）向 NVD 刷新的 CPE 對照候選清單。
-  * 每個專案再透過「使用產品清單」頁籤，從全域產品目錄挑選要套用的產品，並各自指定該專案專屬的「目標套用版本號」、「部署環境」與備註（`Project.productBindings`），因此同一個全域產品可被不同專案各自套用不同版本。
-  * **CVE 掃描以「專案套用」為單位執行**：以該套用產品的全域基礎 CPE + 專案指定的目標版本組成精確 CPE，向 NVD 查詢該特定版本是否有已知 CVE，掃描結果、偵測漏洞數與告警計數皆各自記錄在該筆專案套用（binding）上，而非全域產品層級；可於「使用產品清單」頁籤對單一套用產品按「立即掃描」，或由背景排程/手動觸發全站巡檢所有專案的套用產品。
+  * `product_cpe_cache` 是「所有客戶/專案可能用到的產品」全域目錄，於「系統管理 > 📦 產品管理」統一維護，每個產品皆有定期（或手動觸發）向 NVD 刷新的 CPE 對照候選清單（同一產品名稱在 NVD CPE 字典中常對應到多個不同 vendor 的候選 CPE）。
+  * 每個專案再透過「使用產品清單」頁籤（表格呈現）從全域產品目錄挑選要套用的產品，「選擇監控產品」下拉選單僅顯示產品名稱（不顯示特定 vendor，因掃描已涵蓋該產品名稱下所有 vendor），並各自指定該專案專屬的「目標套用版本號」、「部署環境」（必填）與備註（`Project.productBindings`），因此同一個全域產品可被不同專案各自套用不同版本；**新增套用後，「產品」與「部署環境」即鎖定不可再變更**，僅能編輯版本號/備註/掃描設定，如需更換產品或環境須先移除該筆套用後重新新增。
+  * **CVE 掃描以「專案套用」為單位執行，且會查詢該產品名稱下所有已知 vendor 的 CPE**：由於同一產品名稱可能對應多個不同 vendor 的 CPE 識別碼（例如專案實際部署的版本是由另一家 vendor 發行），掃描時會取出該產品名稱快取的**所有非 deprecated 候選 CPE**，各自代入專案指定的目標版本組成精確 CPE，逐一查詢 NVD 並依 CVE ID 去重合併（查詢間有短暫延遲以避免觸發 NVD API rate limit），避免因只查詢單一 vendor 而漏掉其他 vendor 底下的已知漏洞；若該產品名稱尚無候選 CPE 快取，則退回使用綁定時記錄的單一代表性 CPE 查詢。掃描結果、偵測漏洞數與告警計數皆各自記錄在該筆專案套用（binding）上，而非全域產品層級；可於「使用產品清單」頁籤對單一套用產品按「立即掃描」，或由背景排程/手動觸發全站巡檢所有專案的套用產品。系統管理「受監控產品」的全域掃描亦套用相同的多 vendor 查詢邏輯。
 * **組織清單管理**：於「系統管理 > 🏢 組織清單管理」維護「所屬部門」與「專案經理」兩份全域名單，「專案管理」的新增/編輯專案表單即可以下拉選單方式選取，避免手動輸入造成的名稱不一致。
-* **專案部署環境清單**：每個專案的「使用產品清單」頁籤內可自行維護「部署環境」清單（新建專案預設 DEV/SIT/UAT/PRD，可依專案需求動態新增/移除），供該專案的產品版本套用表單使用；因不同客戶/專案所需環境不同，此清單刻意採「專案層級」維護，不設於系統管理的全域設定。
+* **專案部署環境清單**：每個專案在專案詳情頁面內有獨立的「部署環境設定」頁籤（與「使用產品清單」頁籤分開呈現），可自行維護「部署環境」清單（新建專案預設 DEV/SIT/UAT/PRD，可依專案需求動態新增/移除），供該專案的產品版本套用表單使用；因不同客戶/專案所需環境不同，此清單刻意採「專案層級」維護，不設於系統管理的全域設定。
 * **自動閉環聯防與告警**：
   * 支援排程定時自動比對資產、自動生成資安處置工單。
   * 即時發送具備 MessageCard 格式之 MS Teams Webhook 通知與企業 Email 派報。
@@ -84,7 +84,7 @@ SentinelCVE 採用 **Full-Stack (Java 21/Spring Boot 3 + React/Vite)** 一體化
   * `App.tsx`：應用程式主要進入點，控管頂部導覽列狀態、數據載入與全局 Modal 狀態。
   * `Navbar.tsx`：頂部導覽列，提供 4 大頁面切換、即時全站掃描按鈕與未讀警報通知 Dropdown。
   * `Dashboard.tsx`：總覽儀表板，提供核心 KPI 數據、風險指數圓餅圖與最新監控 Feed。
-  * `ProjectManager.tsx`：專案管理、產品升級版本矩陣對照表、處置工單 Kanban 看板。
+  * `ProjectManager.tsx`：專案管理、產品升級版本矩陣對照表、處置工單 Kanban 看板。專案詳情頁面分為 6 個頁籤：1. 專案基本資訊、2. 部署環境設定、3. 使用產品清單（表格，含新增/掃描/移除套用產品）、4. 通知管道與頻率設定、5. 產品版本與升級對照、6. 專案資產弱點列表。
   * `SystemManager.tsx`：系統整合管理大廳，收納排程設定、監控資產產品、CPE 對照管理、組織清單管理、NVD API Key 管理、資料庫連線管理、SMTP 郵件伺服器、Teams Webhook 與稽核日誌。
   * `CpeManager.tsx` (嵌入於 SystemManager)：管理 `product_cpe_cache` 資料表，可從 NVD 重新查詢/刷新、手動新增編輯或刪除各產品對應的 CPE 識別碼，並可一鍵批次檢查所有已儲存產品是否有新發布的 CPE。
   * `OrgDirectoryManager.tsx` (嵌入於 SystemManager)：維護「所屬部門」與「專案經理」清單，供「專案管理」新增/編輯專案表單以下拉選單方式選取。
@@ -99,7 +99,7 @@ SentinelCVE 採用 **Full-Stack (Java 21/Spring Boot 3 + React/Vite)** 一體化
 * **核心技術**：Java 21, Spring Boot 3 (Web / JDBC / Async / Scheduling), Maven, **PostgreSQL 16 (`postgresql` JDBC driver + HikariCP)**。
 * **模組劃分 (`java-backend/src/main/java/com/sentinelcve/`)**：
   * `controller/*`：REST API endpoints（`/api/dashboard/stats`, `/api/cves`, `/api/cves/scan`, `/api/products`, `/api/projects`, `POST /api/projects/{id}/bindings/{productId}/scan`（針對單一專案套用產品即時觸發 CVE 掃描）, `/api/tickets`, `/api/schedule/*`, `/api/system/*`, `/api/system/db-config`, `/api/cpe-cache/*`, `/api/nvd/*`, `/api/org-directory/*` 等）。
-  * `service/*`：核心業務邏輯，包含 `ScanService`（NVD/OSV 檢索與版本比對）、`ProductProviderService`（NVD CPE 查詢）、`CpeCacheService`（批次檢查已快取產品是否有新發布 CPE，供手動觸發與排程共用）、`MailService`（動態 SMTP 寄信）、`WebhookDispatchService`（Teams/Slack/自訂 Webhook）、`AlertRuleEngineService`（告警規則引擎）、`SchedulerService`（`@Scheduled` 背景排程，含掃描排程與 CPE 對照自動更新排程）、`ProjectDigestService`（專案摘要通知）。
+  * `service/*`：核心業務邏輯，包含 `ScanService`（NVD/OSV 檢索與版本比對；掃描單一專案套用產品時，會依產品名稱取出快取的所有非 deprecated 候選 CPE 逐一查詢 NVD 並依 CVE ID 去重合併，涵蓋不同 vendor 提供的同名產品，查詢間有延遲避免觸發 rate limit，無候選快取時退回單一代表性 CPE 查詢）、`ProductProviderService`（NVD CPE 查詢；「受監控產品」全域掃描亦採相同的多候選 CPE 去重合併邏輯）、`CpeCacheService`（批次檢查已快取產品是否有新發布 CPE，供手動觸發與排程共用）、`MailService`（動態 SMTP 寄信）、`WebhookDispatchService`（Teams/Slack/自訂 Webhook）、`AlertRuleEngineService`（告警規則引擎）、`SchedulerService`（`@Scheduled` 背景排程，含掃描排程與 CPE 對照自動更新排程）、`ProjectDigestService`（專案摘要通知）。
   * `db/PersistenceRepository.java` + `config/DataSourceConfig.java`：應用程式狀態（監控產品、CVE 資料庫、警報規則、通知、Webhook、稽核日誌、專案、工單、CPE 快取、NVD/Email/Teams/排程設定）全部以 PostgreSQL 儲存，每個集合對應一張資料表，主要欄位另外抽出做索引（如 `severity`、`cisa_kev`、`status`），完整物件則存於 `data JSONB` 欄位（透過 `PGobject` 序列化），服務啟動時整批載入記憶體、每次異動即以 `@Async` 方式整批寫回資料庫（Transaction 包裹，確保一致性）。另有 `product_cpe_cache`、`departments`、`project_managers` 三張獨立維運表格，採一般欄位（非 JSONB）直接 CRUD，不隨 AppState 整批快照寫回，供「CPE 對照管理」與「組織清單管理」頁面即時查詢/新增/刪除使用；部署環境則不建立獨立全域資料表，而是以 `deploymentEnvironments` 欄位存於各專案自身的 JSONB 物件中（新建專案預設 seed `DEV`/`SIT`/`UAT`/`PRD`），確保每個專案可獨立維護自己的部署環境清單。
   * `model/*`：與前端 `src/types.ts` 對應之 Java Model（Jackson camelCase 序列化）。
 
