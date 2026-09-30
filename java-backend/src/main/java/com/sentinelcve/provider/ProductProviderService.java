@@ -2,6 +2,7 @@ package com.sentinelcve.provider;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sentinelcve.db.PersistenceRepository;
 import com.sentinelcve.model.MonitoredProduct;
 import com.sentinelcve.state.AppState;
 import lombok.Data;
@@ -14,6 +15,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
@@ -28,9 +30,15 @@ public class ProductProviderService {
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(20)).build();
     private final ObjectMapper mapper = new ObjectMapper();
     private final AppState state;
+    private final PersistenceRepository persistenceRepository;
 
-    public ProductProviderService(AppState state) {
+    /** Delay between successive NVD cpeName queries when a single product name maps to multiple
+     * vendor CPE candidates, to stay well under NVD's rate limit. */
+    private static final long MULTI_CPE_QUERY_DELAY_MS = 1500;
+
+    public ProductProviderService(AppState state, PersistenceRepository persistenceRepository) {
         this.state = state;
+        this.persistenceRepository = persistenceRepository;
     }
 
     /** Resolves the NVD API key to use: the key saved via 系統管理 > NVD API Key takes priority
@@ -65,7 +73,6 @@ public class ProductProviderService {
         private String product;
         private String title;
         private boolean deprecated;
-        private boolean primary; // marks the admin-preferred vendor:product identity for scanning/display
     }
 
     /** Queries the NVD CPE Dictionary API's cpeMatchString filter (e.g. cpe:2.3:a:*:vertica) to
@@ -584,10 +591,11 @@ public class ProductProviderService {
             }
         }
 
-        String cpe = resolvedCpe(product);
-        if (cpe != null) {
+        List<String> exactCpes = resolveExactCpes(product);
+        for (int i = 0; i < exactCpes.size(); i++) {
+            String exactCpe = exactCpes.get(i);
             String sourceUrl = "https://services.nvd.nist.gov/rest/json/cves/2.0?cpeName=" +
-                java.net.URLEncoder.encode(cpe, java.nio.charset.StandardCharsets.UTF_8) + "&isVulnerable";
+                java.net.URLEncoder.encode(exactCpe, java.nio.charset.StandardCharsets.UTF_8) + "&isVulnerable";
             String nvdApiKey = resolveNvdApiKey();
             java.util.Map<String, String> headers = (nvdApiKey != null && !nvdApiKey.isBlank())
                 ? java.util.Map.of("apiKey", nvdApiKey) : java.util.Map.of();
@@ -601,13 +609,44 @@ public class ProductProviderService {
                     results.put(item.getId(), item);
                 }
             }
+            if (i < exactCpes.size() - 1) Thread.sleep(MULTI_CPE_QUERY_DELAY_MS);
         }
 
         boolean hasEcosystem = identity.ecosystem() != null && !identity.ecosystem().isBlank();
-        if (product.getPurl() == null && !hasEcosystem && cpe == null) {
+        if (product.getPurl() == null && !hasEcosystem && exactCpes.isEmpty()) {
             throw new RuntimeException("缺少可精確比對漏洞的 PURL、ecosystem/packageName 或完整 CPE。");
         }
         return new ArrayList<>(results.values());
+    }
+
+    /** Resolves every exact (version-substituted) CPE to query NVD for a product: every
+     * non-deprecated candidate cached in product_cpe_cache for this product's name (so CVEs from
+     * every known vendor for this product name are found, not just the one "representative" CPE
+     * picked for display), falling back to the single CPE already resolved onto {@code product}
+     * (product_cpe_cache.candidates entry chosen by ProductController, or the hardcoded
+     * PostgreSQL special-case) when no cache entry exists for this product name yet. */
+    private List<String> resolveExactCpes(MonitoredProduct product) {
+        List<ProductProviderService.CpeLookupResult> cached = product.getName() == null ? null
+            : persistenceRepository.getCachedCpeCandidates(product.getName(), ProductProviderService.CpeLookupResult.class);
+        List<String> baseCpes = new ArrayList<>();
+        if (cached != null && !cached.isEmpty()) {
+            for (ProductProviderService.CpeLookupResult candidate : cached) {
+                if (!candidate.isDeprecated() && candidate.getCpe() != null) baseCpes.add(candidate.getCpe());
+            }
+        }
+        if (baseCpes.isEmpty()) {
+            String fallback = resolvedCpe(product);
+            return fallback != null ? List.of(fallback) : List.of();
+        }
+        List<String> exactCpes = new ArrayList<>();
+        for (String baseCpe : baseCpes) {
+            String[] parts = baseCpe.split(":");
+            if (parts.length >= 6 && product.getCurrentVersion() != null) {
+                parts[5] = product.getCurrentVersion();
+            }
+            exactCpes.add(String.join(":", parts));
+        }
+        return exactCpes;
     }
 }
 

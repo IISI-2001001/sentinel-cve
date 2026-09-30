@@ -2293,7 +2293,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   >
                     {products.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name} ({p.vendor || '通用'})
+                        {p.name}
                       </option>
                     ))}
                   </select>

@@ -65,13 +65,11 @@ public class CpeCacheService {
             result.setCheckedCount(result.getCheckedCount() + 1);
             try {
                 Set<String> existingCpes = new LinkedHashSet<>();
-                String priorPrimaryCpe = null;
                 Object candidatesNode = entry.get("candidates");
                 if (candidatesNode instanceof JsonNode node) {
                     for (JsonNode candidate : node) {
                         String cpe = candidate.path("cpe").asText(null);
                         if (cpe != null) existingCpes.add(cpe);
-                        if (candidate.path("primary").asBoolean(false)) priorPrimaryCpe = cpe;
                     }
                 }
 
@@ -82,14 +80,6 @@ public class CpeCacheService {
                 }
 
                 if (!newCpes.isEmpty()) {
-                    if (priorPrimaryCpe != null) {
-                        for (var candidate : fresh) {
-                            if (priorPrimaryCpe.equals(candidate.getCpe())) {
-                                candidate.setPrimary(true);
-                                break;
-                            }
-                        }
-                    }
                     persistenceRepository.saveCpeCandidates(productName, fresh);
                     ProductCpeUpdate update = new ProductCpeUpdate();
                     update.setProductName(productName);

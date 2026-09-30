@@ -65,12 +65,7 @@ public class ProductController {
         if (candidatesObj instanceof com.fasterxml.jackson.databind.JsonNode candidatesNode && candidatesNode.isArray()) {
             com.fasterxml.jackson.databind.JsonNode chosen = null;
             for (com.fasterxml.jackson.databind.JsonNode candidate : candidatesNode) {
-                if (candidate.path("primary").asBoolean(false)) { chosen = candidate; break; }
-            }
-            if (chosen == null) {
-                for (com.fasterxml.jackson.databind.JsonNode candidate : candidatesNode) {
-                    if (!candidate.path("deprecated").asBoolean(false)) { chosen = candidate; break; }
-                }
+                if (!candidate.path("deprecated").asBoolean(false)) { chosen = candidate; break; }
             }
             if (chosen == null && candidatesNode.size() > 0) chosen = candidatesNode.get(0);
             if (chosen != null) {

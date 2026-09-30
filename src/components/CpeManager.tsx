@@ -7,7 +7,6 @@ interface CpeCandidate {
   product: string;
   title?: string;
   deprecated: boolean;
-  primary?: boolean;
 }
 
 interface CpeCacheEntry {
@@ -119,26 +118,6 @@ export const CpeManager: React.FC = () => {
       await loadEntries();
     } catch (err: any) {
       setError(err.message || '刪除失敗');
-    }
-  };
-
-  /** 標記某個 CPE 為此產品名稱的「主要」候選——決定「使用產品清單」下拉選單顯示的製造商，
-   * 以及新增產品套用時預設帶入哪一組 CPE 進行弱點掃描。 */
-  const handleSetPrimary = async (productName: string, cpe: string) => {
-    setError(null);
-    try {
-      const res = await fetch(`/api/cpe-cache/${encodeURIComponent(productName)}/primary`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cpe }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `設定主要 CPE 失敗 (HTTP ${res.status})`);
-      }
-      await loadEntries();
-    } catch (err: any) {
-      setError(err.message || '設定主要 CPE 失敗');
     }
   };
 
@@ -310,30 +289,12 @@ export const CpeManager: React.FC = () => {
                             className={`font-mono text-[11px] px-2 py-0.5 rounded border w-fit ${
                               c.deprecated
                                 ? 'bg-slate-100 text-slate-500 border-slate-200'
-                                : c.primary
-                                ? 'bg-amber-50 text-amber-800 border-amber-300'
                                 : 'bg-blue-50 text-blue-800 border-blue-200'
                             }`}
                           >
                             {c.cpe}
                             {c.deprecated ? '（已棄用）' : ''}
                           </span>
-                          {c.primary ? (
-                            <span className="text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-300 rounded px-1.5 py-0.5 whitespace-nowrap">
-                              主要
-                            </span>
-                          ) : (
-                            entry.candidates.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => handleSetPrimary(entry.productName, c.cpe)}
-                                className="text-[10px] font-semibold text-slate-500 hover:text-amber-700 hover:underline whitespace-nowrap"
-                                title="設定此 CPE 為此產品名稱的主要製造商，決定掃描與下拉選單預設帶入的 CPE"
-                              >
-                                設為主要
-                              </button>
-                            )
-                          )}
                         </div>
                       ))}
                     </div>

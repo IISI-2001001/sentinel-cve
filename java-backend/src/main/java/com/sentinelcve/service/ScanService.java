@@ -2,6 +2,7 @@ package com.sentinelcve.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sentinelcve.db.PersistenceRepository;
 import com.sentinelcve.model.*;
 import com.sentinelcve.provider.ProductProviderService;
 import com.sentinelcve.state.AppState;
@@ -14,6 +15,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 
@@ -23,12 +25,20 @@ public class ScanService {
 
     private final AppState state;
     private final ProductProviderService productProviderService;
+    private final PersistenceRepository persistenceRepository;
     private final ObjectMapper mapper;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(20)).build();
 
-    public ScanService(AppState state, ProductProviderService productProviderService, ObjectMapper mapper) {
+    /** Delay between successive NVD cpeName queries when a single product name maps to multiple
+     * vendor CPE candidates, to stay well under NVD's rate limit (5 req/30s without an API key,
+     * 50 req/30s with one). */
+    private static final long MULTI_CPE_QUERY_DELAY_MS = 1500;
+
+    public ScanService(AppState state, ProductProviderService productProviderService,
+                        PersistenceRepository persistenceRepository, ObjectMapper mapper) {
         this.state = state;
         this.productProviderService = productProviderService;
+        this.persistenceRepository = persistenceRepository;
         this.mapper = mapper;
     }
 
@@ -58,40 +68,53 @@ public class ScanService {
         return found;
     }
 
-    /** Scans a single project's product binding for CVEs by resolving the exact CPE (global
-     * catalog's base CPE + this project's targetVersion) and querying NVD's cpeName-match API,
+    /** Scans a single project's product binding for CVEs by resolving the exact CPE(s) (global
+     * catalog's base CPE(s) + this project's targetVersion) and querying NVD's cpeName-match API,
      * mirroring ProductProviderService's CPE branch but scoped per project-binding rather than
-     * per globally-managed MonitoredProduct. Merges discovered CVEs into cvesDatabase and
-     * updates the binding's own detectedCveCount/lastScannedAt. */
+     * per globally-managed MonitoredProduct. Since a single product name can map to multiple
+     * different vendor CPE identities (e.g. the project's actual deployed version may come from
+     * a different vendor than the one picked as the "representative" CPE at bind time), this
+     * queries every non-deprecated candidate CPE cached for the binding's product name and
+     * merges/dedupes the results by CVE ID, so no vendor's CVEs get silently missed. Falls back
+     * to the single CPE snapshot stored on the binding (binding.getProductCpe()) if no cache
+     * entry exists for this product name. Merges discovered CVEs into cvesDatabase and updates
+     * the binding's own detectedCveCount/lastScannedAt. */
     public List<CveItem> scanProjectBinding(ProjectProductBinding binding) throws Exception {
-        if (binding.getProductCpe() == null || binding.getProductCpe().isBlank()) {
-            throw new RuntimeException("此套用產品缺少全域產品目錄的 CPE 資訊，請重新選取產品後再試一次。");
-        }
         if (binding.getTargetVersion() == null || binding.getTargetVersion().isBlank()) {
             throw new RuntimeException("此套用產品缺少目標套用版本號，請先編輯設定版本。");
         }
 
-        String[] parts = binding.getProductCpe().split(":");
-        if (parts.length >= 6) parts[5] = binding.getTargetVersion();
-        String exactCpe = String.join(":", parts);
+        List<String> baseCpes = resolveNonDeprecatedBaseCpes(binding.getProductName(), binding.getProductCpe());
+        if (baseCpes.isEmpty()) {
+            throw new RuntimeException("此套用產品缺少全域產品目錄的 CPE 資訊，請重新選取產品後再試一次。");
+        }
 
-        String sourceUrl = "https://services.nvd.nist.gov/rest/json/cves/2.0?cpeName=" +
-            java.net.URLEncoder.encode(exactCpe, java.nio.charset.StandardCharsets.UTF_8) + "&isVulnerable";
-        String nvdApiKey = resolveNvdApiKey();
-        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(URI.create(sourceUrl))
-            .timeout(Duration.ofSeconds(20)).header("User-Agent", "SentinelCVE/1.0").GET();
-        if (nvdApiKey != null && !nvdApiKey.isBlank()) requestBuilder.header("apiKey", nvdApiKey);
-        HttpResponse<String> response = http.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() / 100 != 2) throw new RuntimeException("NVD API 回傳 HTTP " + response.statusCode());
+        LinkedHashMap<String, CveItem> found = new LinkedHashMap<>();
+        for (int i = 0; i < baseCpes.size(); i++) {
+            String[] parts = baseCpes.get(i).split(":");
+            if (parts.length >= 6) parts[5] = binding.getTargetVersion();
+            String exactCpe = String.join(":", parts);
 
-        JsonNode data = mapper.readTree(response.body());
-        List<CveItem> found = new ArrayList<>();
-        for (JsonNode entry : data.path("vulnerabilities")) {
-            found.add(bindingToCve(entry.path("cve"), binding, exactCpe, sourceUrl));
+            String sourceUrl = "https://services.nvd.nist.gov/rest/json/cves/2.0?cpeName=" +
+                java.net.URLEncoder.encode(exactCpe, java.nio.charset.StandardCharsets.UTF_8) + "&isVulnerable";
+            String nvdApiKey = resolveNvdApiKey();
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(URI.create(sourceUrl))
+                .timeout(Duration.ofSeconds(20)).header("User-Agent", "SentinelCVE/1.0").GET();
+            if (nvdApiKey != null && !nvdApiKey.isBlank()) requestBuilder.header("apiKey", nvdApiKey);
+            HttpResponse<String> response = http.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() / 100 != 2) throw new RuntimeException("NVD API 回傳 HTTP " + response.statusCode());
+
+            JsonNode data = mapper.readTree(response.body());
+            for (JsonNode entry : data.path("vulnerabilities")) {
+                CveItem item = bindingToCve(entry.path("cve"), binding, exactCpe, sourceUrl);
+                found.put(item.getId(), item);
+            }
+
+            if (i < baseCpes.size() - 1) Thread.sleep(MULTI_CPE_QUERY_DELAY_MS);
         }
 
         synchronized (state.lock) {
-            for (CveItem item : found) {
+            for (CveItem item : found.values()) {
                 int idx = -1;
                 for (int i = 0; i < state.cvesDatabase.size(); i++) {
                     CveItem existing = state.cvesDatabase.get(i);
@@ -107,7 +130,25 @@ public class ScanService {
 
         binding.setDetectedCveCount(found.size());
         binding.setLastScannedAt(Instant.now().toString());
-        return found;
+        return new ArrayList<>(found.values());
+    }
+
+    /** Resolves the list of base CPEs (version wildcarded) to scan for a product name: every
+     * non-deprecated candidate cached in product_cpe_cache for that name, or — if no cache entry
+     * exists yet — a single-element list built from the fallback CPE snapshot stored on the
+     * binding/MonitoredProduct at bind/list time (fallbackCpe may be null, in which case an empty
+     * list is returned). */
+    private List<String> resolveNonDeprecatedBaseCpes(String productName, String fallbackCpe) {
+        List<ProductProviderService.CpeLookupResult> cached = productName == null ? null
+            : persistenceRepository.getCachedCpeCandidates(productName, ProductProviderService.CpeLookupResult.class);
+        if (cached != null && !cached.isEmpty()) {
+            List<String> baseCpes = new ArrayList<>();
+            for (ProductProviderService.CpeLookupResult candidate : cached) {
+                if (!candidate.isDeprecated() && candidate.getCpe() != null) baseCpes.add(candidate.getCpe());
+            }
+            if (!baseCpes.isEmpty()) return baseCpes;
+        }
+        return (fallbackCpe != null && !fallbackCpe.isBlank()) ? List.of(fallbackCpe) : List.of();
     }
 
     private CveItem bindingToCve(JsonNode cve, ProjectProductBinding binding, String exactCpe, String sourceUrl) {
