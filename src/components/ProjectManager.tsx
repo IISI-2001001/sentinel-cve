@@ -1315,54 +1315,57 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               </p>
             </div>
 
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                {(prj.deploymentEnvironments || []).map((env) => (
-                  <span
-                    key={env}
-                    className="inline-flex items-center space-x-1.5 pl-2.5 pr-1.5 py-1 rounded-lg bg-white border border-slate-300 text-xs font-bold text-slate-700"
+            <div className="border border-slate-200 rounded-2xl overflow-hidden">
+              <div className="bg-slate-50 border-b border-slate-200 p-4 space-y-3">
+                <div className="text-xs font-bold text-slate-700 uppercase flex items-center space-x-1.5">
+                  <Server className="w-3.5 h-3.5 text-blue-600" />
+                  <span>部署環境清單</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newProjectEnvName}
+                    onChange={(e) => setNewProjectEnvName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleAddProjectEnvironment(newProjectEnvName);
+                        setNewProjectEnvName('');
+                      }
+                    }}
+                    placeholder="輸入新的部署環境名稱，例如 DR"
+                    className="flex-1 bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-medium focus:outline-none focus:border-blue-500 shadow-2xs"
+                  />
+                  <button
+                    type="button"
+                    disabled={!newProjectEnvName.trim()}
+                    onClick={() => {
+                      handleAddProjectEnvironment(newProjectEnvName);
+                      setNewProjectEnvName('');
+                    }}
+                    className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center space-x-1.5 shadow-sm transition-all disabled:opacity-50 shrink-0"
                   >
-                    <span>{env}</span>
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>新增</span>
+                  </button>
+                </div>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {(prj.deploymentEnvironments || []).length === 0 && (
+                  <div className="px-4 py-6 text-center text-slate-400 text-xs">尚無部署環境資料，請於上方新增。</div>
+                )}
+                {(prj.deploymentEnvironments || []).map((env) => (
+                  <div key={env} className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-50/60">
+                    <span className="text-xs font-bold text-slate-900">{env}</span>
                     <button
                       type="button"
                       onClick={() => handleRemoveProjectEnvironment(env)}
-                      className="p-0.5 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-600"
+                      className="p-1.5 rounded-lg hover:bg-red-50 text-red-600"
                       title={`移除 ${env}`}
                     >
-                      <X className="w-3 h-3" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
-                  </span>
+                  </div>
                 ))}
-                {(prj.deploymentEnvironments || []).length === 0 && (
-                  <span className="text-[11px] text-slate-400">尚未設定任何部署環境</span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={newProjectEnvName}
-                  onChange={(e) => setNewProjectEnvName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleAddProjectEnvironment(newProjectEnvName);
-                      setNewProjectEnvName('');
-                    }
-                  }}
-                  placeholder="輸入新的部署環境名稱，例如 DR"
-                  className="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
-                />
-                <button
-                  type="button"
-                  disabled={!newProjectEnvName.trim()}
-                  onClick={() => {
-                    handleAddProjectEnvironment(newProjectEnvName);
-                    setNewProjectEnvName('');
-                  }}
-                  className="px-3.5 py-2 rounded-xl bg-slate-700 hover:bg-slate-800 text-white font-bold text-xs flex items-center space-x-1.5 transition-colors disabled:opacity-50 shrink-0"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>新增環境</span>
-                </button>
               </div>
             </div>
           </div>
@@ -1513,7 +1516,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                           {renderProductsSortIcon('environment')}
                         </button>
                       </th>
-                      <th className="px-4 py-3">CPE 對照</th>
                       <th className="px-4 py-3">
                         <button onClick={() => toggleProductsSort('cveCount')} className="flex items-center gap-1 hover:text-blue-700">
                           <span>偵測漏洞</span>
@@ -1548,12 +1550,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                           <td className="px-4 py-3.5">
                             <span className="font-bold text-slate-800 text-xs">
                               {binding?.environment || '未指定環境'}
-                            </span>
-                          </td>
-
-                          <td className="px-4 py-3.5">
-                            <span className="text-[11px] text-slate-500 font-mono">
-                              {binding?.productCpe || p.cpeKeyword || '尚無 CPE 對照'}
                             </span>
                           </td>
 
