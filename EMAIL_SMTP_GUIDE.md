@@ -14,6 +14,7 @@ SentinelCVE 的告警/摘要通知信件是透過「系統管理 > ⏱️ 全域
 | **SendGrid SMTP（備援）** | 否（單一寄件人驗證） | 每日 100 封 | 低 | 作法與 Brevo 相同，額度略低 |
 | Amazon SES SMTP | 驗證信箱可不用 DNS，但 Sandbox 模式收件人也要先驗證 | 量小近乎免費 | 中，需 AWS 帳號＋申請提升至 Production Access | 短期不是最快方案 |
 | Mailgun SMTP | 正式對外寄送（無收件人數量限制）需網域 DNS 驗證 | 有限，新制常需信用卡 | 中 | 若無 DNS，Sandbox 網域只能寄給最多 5 個已授權收件人，僅適合臨時測試 |
+| Resend SMTP | **必須**先完成網域 DNS 驗證才能寄信，無免 DNS 替代方案 | 每月 3,000 封、每日 100 封 | 中，但卡在 DNS 門檻 | ❌ 官方文件明確要求「verified domain」為前置條件；內建的 `onboarding@resend.dev`/`delivered@resend.dev` 等測試信箱僅能模擬送達/退信情境，**無法寄給任何真實收件人**，限制比 Mailgun 更嚴格（Mailgun 至少能用 Sandbox 網域寄給 5 個真實授權收件人）。在完全無法異動公司 DNS 的前提下不可行；若未來取得 DNS 權限，是現代化、開發體驗佳的選項 |
 | Microsoft Graph API (Mail.Send) | 需 Azure AD App Registration + IT 核發應用程式權限 | 依 M365 授權 | 高 | 微軟官方建議的 SMTP AUTH 替代方案，但需 IT 配合申請，若公司不受理則不可行 |
 | 個人 Gmail SMTP | 否 | 約每日 500 封 | 低，但需開兩步驟驗證＋產生「應用程式密碼」 | ⚠️ 消費者信箱非為程式化/自動化寄信設計，可能被 Google 判定為可疑活動而鎖帳號，僅建議短期測試或臨時過渡使用，不建議正式長期依賴 |
 | 個人 Outlook.com / Hotmail SMTP | 否 | 官方無明確保證額度 | 低，但 Microsoft 正逐步淘汰消費者信箱的 SMTP 基本驗證 | ⚠️ 與公司 Outlook 無關（純個人免費信箱），但未來可能無預警失效，不建議採用 |
@@ -73,6 +74,14 @@ SentinelCVE 的告警/摘要通知信件是透過「系統管理 > ⏱️ 全域
 ## 不建議方案：Mailgun（因無公司 DNS 權限）
 
 Mailgun 註冊後預設提供一個 `sandboxXXXX.mailgun.org` 網域，不需要 DNS 即可用，但**只能寄給「Authorized Recipients」名單**（最多 5 個信箱，且每個收件人都要先收邀請信並點擊確認）。若要對任意收件人正式寄送，需另外新增自訂網域並在 DNS 新增 TXT（SPF/DKIM）與 MX 記錄驗證——這需要公司網域的 DNS 存取權限，在本案無法取得的情況下，Mailgun 僅能作為「寄給少數已知內部信箱」的臨時測試工具，不建議作為正式方案。
+
+## 不建議方案：Resend（因無公司 DNS 權限，限制比 Mailgun 更嚴格）
+
+Resend 的 SMTP 設定本身很簡單（主機 `smtp.resend.com`，連接埠 587/465 等，帳號固定為 `resend`，密碼為 API Key），但官方文件明確將「完成網域驗證（Verified Domain）」列為使用前提，**沒有提供像 Brevo/SendGrid 那種免 DNS 的單一寄件人驗證機制**。
+
+官方內建的測試信箱（`delivered@resend.dev`、`bounced@resend.dev`、`complained@resend.dev` 等）只能用來**模擬**送達成功/退信/被標記垃圾信等情境，**無法寄送給任何真實收件人**——這點比 Mailgun 的 Sandbox 網域（至少能寄給 5 個真實授權收件人）更受限。因此在完全無法異動公司 DNS 的前提下，Resend 目前無法作為方案使用。
+
+免費額度為每月 3,000 封、每日 100 封，功能與開發體驗現代化；若未來取得公司網域的 DNS 存取權限，可重新評估將 Resend 納入候選。
 
 ## 不建議方案：Microsoft Graph API
 
