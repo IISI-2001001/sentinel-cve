@@ -67,7 +67,7 @@ export const SystemManager: React.FC<SystemManagerProps> = ({
   // Sync defaultSubTab if updated externally
   useEffect(() => {
     if (defaultSubTab) {
-      setSubTab(defaultSubTab === 'email-smtp' || defaultSubTab === 'teams-notification' ? 'schedule' : defaultSubTab);
+      setSubTab(defaultSubTab === 'teams-notification' ? 'schedule' : defaultSubTab);
     }
   }, [defaultSubTab]);
 
@@ -467,6 +467,18 @@ export const SystemManager: React.FC<SystemManagerProps> = ({
           >
             <Database className="w-4 h-4 text-cyan-600" />
             <span>資料庫連線</span>
+          </button>
+
+          <button
+            onClick={() => setSubTab('email-smtp')}
+            className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              subTab === 'email-smtp'
+                ? 'bg-white text-amber-700 shadow-2xs border border-amber-200 font-extrabold'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+            }`}
+          >
+            <Mail className="w-4 h-4 text-amber-600" />
+            <span>全域 Email SMTP</span>
           </button>
 
           <button
