@@ -110,14 +110,14 @@ public class ProjectController {
                 ? deploymentEnvironments
                 : new ArrayList<>(List.of("DEV", "SIT", "UAT", "PRD"))
         );
-        newProject.setNotifyEmail(payload.containsKey("notifyEmail") ? truthy(payload.get("notifyEmail")) : true);
+        newProject.setNotifyEmail(payload.containsKey("notifyEmail") ? truthy(payload.get("notifyEmail")) : false);
         newProject.setNotifyFrequency(notifyFrequency);
-        newProject.setVersionNotifyEnabled(payload.containsKey("versionNotifyEnabled") ? truthy(payload.get("versionNotifyEnabled")) : true);
+        newProject.setVersionNotifyEnabled(payload.containsKey("versionNotifyEnabled") ? truthy(payload.get("versionNotifyEnabled")) : false);
         newProject.setVersionNotifyFrequency(nonBlank(asString(payload.get("versionNotifyFrequency")), "DAILY"));
-        newProject.setCveNotifyEnabled(payload.containsKey("cveNotifyEnabled") ? truthy(payload.get("cveNotifyEnabled")) : true);
+        newProject.setCveNotifyEnabled(payload.containsKey("cveNotifyEnabled") ? truthy(payload.get("cveNotifyEnabled")) : false);
         newProject.setCveNotifyFrequency(nonBlank(asString(payload.get("cveNotifyFrequency")), notifyFrequency));
         newProject.setTeamsWebhookUrl(teamsWebhookUrl);
-        newProject.setTeamsNotifyEnabled(payload.containsKey("teamsNotifyEnabled") ? truthy(payload.get("teamsNotifyEnabled")) : true);
+        newProject.setTeamsNotifyEnabled(payload.containsKey("teamsNotifyEnabled") ? truthy(payload.get("teamsNotifyEnabled")) : false);
         newProject.setNotifyEmailRecipientIds(toStringList(payload.get("notifyEmailRecipientIds")));
         newProject.setNotifyMinCvss(numberOrDefault(payload.get("notifyMinCvss"), 7.0));
         newProject.setNotifyCisaKevOnly(truthy(payload.get("notifyCisaKevOnly")));

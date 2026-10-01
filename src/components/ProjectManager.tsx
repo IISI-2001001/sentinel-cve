@@ -495,7 +495,9 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   const [formOwnerEmail, setFormOwnerEmail] = useState('');
   const [formSecondary, setFormSecondary] = useState('');
   const [formSelectedProducts, setFormSelectedProducts] = useState<string[]>([]);
-  const [formNotifyEmail, setFormNotifyEmail] = useState(true);
+  const [formNotifyEmail, setFormNotifyEmail] = useState(false);
+  const [formVersionNotifyEnabled, setFormVersionNotifyEnabled] = useState(false);
+  const [formCveNotifyEnabled, setFormCveNotifyEnabled] = useState(false);
   const [formNotifyMinCvss, setFormNotifyMinCvss] = useState(7.0);
   const [formNotifyCisaKevOnly, setFormNotifyCisaKevOnly] = useState(false);
   const [formNotifyFrequency, setFormNotifyFrequency] = useState<
@@ -567,7 +569,9 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     setFormOwnerEmail('');
     setFormSecondary('');
     setFormSelectedProducts([]);
-    setFormNotifyEmail(true);
+    setFormNotifyEmail(false);
+    setFormVersionNotifyEnabled(false);
+    setFormCveNotifyEnabled(false);
     setFormNotifyMinCvss(7.0);
     setFormNotifyCisaKevOnly(false);
     setFormNotifyFrequency('REALTIME');
@@ -586,6 +590,8 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     setFormSecondary('');
     setFormSelectedProducts(prj.productIds || []);
     setFormNotifyEmail(prj.notifyEmail);
+    setFormVersionNotifyEnabled(prj.versionNotifyEnabled !== false);
+    setFormCveNotifyEnabled(prj.cveNotifyEnabled !== false);
     setFormNotifyMinCvss(prj.notifyMinCvss || 7.0);
     setFormNotifyCisaKevOnly(prj.notifyCisaKevOnly || false);
     setFormNotifyFrequency(prj.notifyFrequency || 'REALTIME');
@@ -611,6 +617,8 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
       secondaryContacts: [],
       productIds: formSelectedProducts,
       notifyEmail: formNotifyEmail,
+      versionNotifyEnabled: formVersionNotifyEnabled,
+      cveNotifyEnabled: formCveNotifyEnabled,
       notifyMinCvss: formNotifyMinCvss,
       notifyCisaKevOnly: formNotifyCisaKevOnly,
       notifyFrequency: formNotifyFrequency,
@@ -1639,11 +1647,15 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                         {setting.title}
                       </span>
                       <label className="inline-flex items-center gap-2 text-[11px] font-bold text-slate-600 cursor-pointer">
-                        <input type="checkbox" checked={setting.enabled} onChange={async (e) => {
-                          const field = setting.kind === 'version' ? 'versionNotifyEnabled' : 'cveNotifyEnabled';
-                          const res = await fetch(`/api/projects/${prj.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [field]: e.target.checked }) });
-                          if (res.ok) { const updated = await res.json(); setActiveProjectDetail(updated); onRefreshData(); }
-                        }} className="rounded border-slate-300" />啟用
+                        <span>啟用</span>
+                        <span className="relative inline-flex items-center cursor-pointer">
+                          <input type="checkbox" checked={setting.enabled} onChange={async (e) => {
+                            const field = setting.kind === 'version' ? 'versionNotifyEnabled' : 'cveNotifyEnabled';
+                            const res = await fetch(`/api/projects/${prj.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [field]: e.target.checked }) });
+                            if (res.ok) { const updated = await res.json(); setActiveProjectDetail(updated); onRefreshData(); }
+                          }} className="sr-only peer" />
+                          <div className={`w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${setting.color === 'blue' ? 'peer-checked:bg-blue-600' : 'peer-checked:bg-rose-600'}`}></div>
+                        </span>
                       </label>
                     </div>
                     <select value={setting.frequency} disabled={!setting.enabled} onChange={async (e) => {
@@ -1676,16 +1688,19 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
 
                   <div className="flex items-center space-x-3">
                     <label className="inline-flex items-center gap-2 text-[11px] font-bold text-slate-600 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={prj.teamsNotifyEnabled !== false}
-                        onChange={async (e) => {
-                          const res = await fetch(`/api/projects/${prj.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ teamsNotifyEnabled: e.target.checked }) });
-                          if (res.ok) { const updated = await res.json(); setActiveProjectDetail(updated); onRefreshData(); }
-                        }}
-                        className="rounded border-slate-300"
-                      />
-                      啟用 Teams Webhook 通知
+                      <span>啟用 Teams Webhook 通知</span>
+                      <span className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={prj.teamsNotifyEnabled !== false}
+                          onChange={async (e) => {
+                            const res = await fetch(`/api/projects/${prj.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ teamsNotifyEnabled: e.target.checked }) });
+                            if (res.ok) { const updated = await res.json(); setActiveProjectDetail(updated); onRefreshData(); }
+                          }}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                      </span>
                     </label>
                     <button
                       onClick={() => handleTestTeamsDispatch(prj)}
@@ -1732,16 +1747,19 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     <span>Email 通知收件人</span>
                   </span>
                   <label className="inline-flex items-center gap-2 text-[11px] font-bold text-slate-600 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={prj.notifyEmail}
-                      onChange={async (e) => {
-                        const res = await fetch(`/api/projects/${prj.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notifyEmail: e.target.checked }) });
-                        if (res.ok) { const updated = await res.json(); setActiveProjectDetail(updated); onRefreshData(); }
-                      }}
-                      className="rounded border-slate-300"
-                    />
-                    啟用 Email 通知
+                    <span>啟用 Email 通知</span>
+                    <span className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={prj.notifyEmail}
+                        onChange={async (e) => {
+                          const res = await fetch(`/api/projects/${prj.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notifyEmail: e.target.checked }) });
+                          if (res.ok) { const updated = await res.json(); setActiveProjectDetail(updated); onRefreshData(); }
+                        }}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </span>
                   </label>
                 </div>
 
