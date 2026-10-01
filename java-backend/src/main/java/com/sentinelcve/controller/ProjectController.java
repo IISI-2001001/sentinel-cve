@@ -117,9 +117,8 @@ public class ProjectController {
         newProject.setCveNotifyEnabled(payload.containsKey("cveNotifyEnabled") ? truthy(payload.get("cveNotifyEnabled")) : true);
         newProject.setCveNotifyFrequency(nonBlank(asString(payload.get("cveNotifyFrequency")), notifyFrequency));
         newProject.setTeamsWebhookUrl(teamsWebhookUrl);
-        newProject.setOwnerTeamsWebhookUrl(nonBlank(asString(payload.get("ownerTeamsWebhookUrl")), teamsWebhookUrl));
-        newProject.setHandlerName(nonBlank(asString(payload.get("handlerName")), ""));
-        newProject.setHandlerTeamsWebhookUrl(nonBlank(asString(payload.get("handlerTeamsWebhookUrl")), ""));
+        newProject.setTeamsNotifyEnabled(payload.containsKey("teamsNotifyEnabled") ? truthy(payload.get("teamsNotifyEnabled")) : true);
+        newProject.setNotifyEmailRecipientIds(toStringList(payload.get("notifyEmailRecipientIds")));
         newProject.setNotifyMinCvss(numberOrDefault(payload.get("notifyMinCvss"), 7.0));
         newProject.setNotifyCisaKevOnly(truthy(payload.get("notifyCisaKevOnly")));
         newProject.setCreatedAt(now);
@@ -203,11 +202,7 @@ public class ProjectController {
         }
 
         Map<String, Object> payload = safeBody(body);
-        String webhookType = "handler".equals(asString(payload.get("webhookType"))) ? "handler" : "owner";
-        String webhookUrl = nonBlank(asString(payload.get("webhookUrl")),
-            "handler".equals(webhookType)
-                ? prj.getHandlerTeamsWebhookUrl()
-                : nonBlank(prj.getOwnerTeamsWebhookUrl(), prj.getTeamsWebhookUrl()));
+        String webhookUrl = nonBlank(asString(payload.get("webhookUrl")), prj.getTeamsWebhookUrl());
         if (webhookUrl == null || webhookUrl.isBlank()) {
             return error(HttpStatus.BAD_REQUEST, "專案未設定 Teams Webhook URL");
         }
@@ -224,8 +219,7 @@ public class ProjectController {
             section.put("activitySubtitle", "專案代號: " + prj.getCode() + " | 頻率設定: " + nonBlank(prj.getNotifyFrequency(), "REALTIME"));
             ArrayNode facts = section.putArray("facts");
             addFact(facts, "專案名稱", prj.getName());
-            addFact(facts, "handler".equals(webhookType) ? "處理人" : "負責人",
-                "handler".equals(webhookType) ? nonBlank(prj.getHandlerName(), "未指定") : prj.getOwnerName());
+            addFact(facts, "負責人", prj.getOwnerName());
             addFact(facts, "通知頻率", nonBlank(prj.getNotifyFrequency(), "REALTIME (即時)"));
             addFact(facts, "測試時間", DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM)
                 .withLocale(Locale.TAIWAN)
@@ -270,8 +264,8 @@ public class ProjectController {
         if (project == null) {
             return error(HttpStatus.NOT_FOUND, "專案不存在");
         }
-        if (isBlank(project.getOwnerTeamsWebhookUrl()) && isBlank(project.getTeamsWebhookUrl()) && isBlank(project.getHandlerTeamsWebhookUrl())) {
-            return error(HttpStatus.BAD_REQUEST, "請先設定負責人或處理人的 Teams Webhook。");
+        if (!canDispatchNotification(project)) {
+            return error(HttpStatus.BAD_REQUEST, "請先設定 Teams Webhook 並啟用通知，或啟用 Email 通知並勾選收件人。");
         }
 
         try {
@@ -280,8 +274,9 @@ public class ProjectController {
             response.put("success", true);
             response.put("sent", result.getSent());
             response.put("recipients", result.getRecipients());
+            response.put("emailsSent", result.getEmailsSent());
             response.put("message", result.getSent() > 0
-                ? "已手動發送 " + result.getSent() + " 項版本更新至 " + result.getRecipients() + " 個 Teams Webhook。"
+                ? "已手動發送 " + result.getSent() + " 項版本更新至 " + result.getRecipients() + " 個 Teams Webhook" + (result.getEmailsSent() > 0 ? "，並寄出 " + result.getEmailsSent() + " 封 Email 通知" : "") + "。"
                 : "目前沒有需要通知的版本更新。");
             return ResponseEntity.ok(response);
         } catch (Exception err) {
@@ -298,8 +293,8 @@ public class ProjectController {
         if (project == null) {
             return error(HttpStatus.NOT_FOUND, "專案不存在");
         }
-        if (isBlank(project.getOwnerTeamsWebhookUrl()) && isBlank(project.getTeamsWebhookUrl()) && isBlank(project.getHandlerTeamsWebhookUrl())) {
-            return error(HttpStatus.BAD_REQUEST, "請先設定負責人或處理人的 Teams Webhook。");
+        if (!canDispatchNotification(project)) {
+            return error(HttpStatus.BAD_REQUEST, "請先設定 Teams Webhook 並啟用通知，或啟用 Email 通知並勾選收件人。");
         }
 
         try {
@@ -308,13 +303,23 @@ public class ProjectController {
             response.put("success", true);
             response.put("sent", result.getSent());
             response.put("recipients", result.getRecipients());
+            response.put("emailsSent", result.getEmailsSent());
             response.put("message", result.getSent() > 0
-                ? "已手動發送 " + result.getSent() + " 項 CVE 至 " + result.getRecipients() + " 個 Teams Webhook。"
+                ? "已手動發送 " + result.getSent() + " 項 CVE 至 " + result.getRecipients() + " 個 Teams Webhook" + (result.getEmailsSent() > 0 ? "，並寄出 " + result.getEmailsSent() + " 封 Email 通知" : "") + "。"
                 : "目前沒有符合 CVSS／CISA KEV 條件的 CVE。");
             return ResponseEntity.ok(response);
         } catch (Exception err) {
             return error(HttpStatus.BAD_GATEWAY, safeMessage(err, "CVE 通知發送失敗"));
         }
+    }
+
+    /** True if this project can send at least one kind of notification (Teams or Email) right now. */
+    private boolean canDispatchNotification(Project project) {
+        boolean teamsReady = Boolean.TRUE.equals(project.getTeamsNotifyEnabled()) && !isBlank(project.getTeamsWebhookUrl());
+        boolean emailReady = project.isNotifyEmail()
+            && project.getNotifyEmailRecipientIds() != null
+            && !project.getNotifyEmailRecipientIds().isEmpty();
+        return teamsReady || emailReady;
     }
 
     @PostMapping("/{id}/notify-test")

@@ -6,6 +6,7 @@ import com.sentinelcve.model.CveItem;
 import com.sentinelcve.model.MonitoredProduct;
 import com.sentinelcve.model.Project;
 import com.sentinelcve.model.ProjectProductBinding;
+import com.sentinelcve.db.PersistenceRepository;
 import com.sentinelcve.provider.ProductProviderService;
 import com.sentinelcve.state.AppState;
 import lombok.Data;
@@ -25,7 +26,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 
-/** Java port of dispatchProjectDigest() in server.ts: sends a Teams-webhook digest of either
+/** Java port of dispatchProjectDigest() in server.ts: sends a Teams-webhook / Email digest of either
  * pending version updates ("VERSION") or newly-relevant CVEs ("CVE") for a project, honoring
  * per-kind notification frequency, signature-based de-duplication, and closed-ticket exclusion. */
 @Service
@@ -36,17 +37,22 @@ public class ProjectDigestService {
     private final StateService stateService;
     private final AlertRuleEngineService alertRuleEngineService;
     private final ProductProviderService productProviderService;
+    private final PersistenceRepository persistenceRepository;
+    private final MailService mailService;
     private final ObjectMapper mapper;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build();
 
     public ProjectDigestService(AppState state, LogService logService, StateService stateService,
                                  AlertRuleEngineService alertRuleEngineService, ProductProviderService productProviderService,
+                                 PersistenceRepository persistenceRepository, MailService mailService,
                                  ObjectMapper mapper) {
         this.state = state;
         this.logService = logService;
         this.stateService = stateService;
         this.alertRuleEngineService = alertRuleEngineService;
         this.productProviderService = productProviderService;
+        this.persistenceRepository = persistenceRepository;
+        this.mailService = mailService;
         this.mapper = mapper;
     }
 
@@ -54,6 +60,7 @@ public class ProjectDigestService {
     public static class DigestResult {
         private int sent;
         private int recipients;
+        private int emailsSent;
     }
 
     private static long frequencyMs(String frequency) {
@@ -189,14 +196,9 @@ public class ProjectDigestService {
         headerSection.put("markdown", true);
 
         LinkedHashSet<String> urls = new LinkedHashSet<>();
-        if (project.getOwnerTeamsWebhookUrl() != null && !project.getOwnerTeamsWebhookUrl().isBlank()) urls.add(project.getOwnerTeamsWebhookUrl());
-        else if (project.getTeamsWebhookUrl() != null && !project.getTeamsWebhookUrl().isBlank()) urls.add(project.getTeamsWebhookUrl());
-        if (project.getHandlerTeamsWebhookUrl() != null && !project.getHandlerTeamsWebhookUrl().isBlank()) urls.add(project.getHandlerTeamsWebhookUrl());
-
-        if (urls.isEmpty()) {
-            logService.addLog("WEBHOOK_DISPATCH", "WARNING", "[專案通知略過] 專案【" + project.getName() + "】未設定 Teams Webhook", project.getName());
-            stateService.persist();
-            return empty;
+        boolean teamsEnabled = Boolean.TRUE.equals(project.getTeamsNotifyEnabled());
+        if (teamsEnabled && project.getTeamsWebhookUrl() != null && !project.getTeamsWebhookUrl().isBlank()) {
+            urls.add(project.getTeamsWebhookUrl());
         }
 
         ObjectNode payload = mapper.createObjectNode();
@@ -208,26 +210,93 @@ public class ProjectDigestService {
         sections.add(headerSection);
         detailSections.forEach(sections::add);
 
-        for (String url : urls) {
-            HttpRequest request = HttpRequest.newBuilder(URI.create(url))
-                .timeout(Duration.ofSeconds(15)).header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(payload.toString())).build();
-            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() / 100 != 2) throw new RuntimeException("Teams Webhook 回傳 HTTP " + response.statusCode());
+        if (urls.isEmpty()) {
+            logService.addLog("WEBHOOK_DISPATCH", "WARNING", "[專案通知略過] 專案【" + project.getName() + "】未啟用 Teams Webhook 通知或尚未設定", project.getName());
+        } else {
+            for (String url : urls) {
+                HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                    .timeout(Duration.ofSeconds(15)).header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(payload.toString())).build();
+                HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+                if (response.statusCode() / 100 != 2) throw new RuntimeException("Teams Webhook 回傳 HTTP " + response.statusCode());
+            }
         }
+
+        int emailsSent = dispatchEmail(project, subject, isVersion, visibleItems, items.size(), visibleItems.size());
 
         if (isVersion) project.setVersionNotifyLastSignature(deliveredSignature);
         else project.setCveNotifyLastSignature(deliveredSignature);
 
         logService.addLog("WEBHOOK_DISPATCH", "SUCCESS",
-            "[" + (isVersion ? "版本" : "CVE") + "排程通知] 專案【" + project.getName() + "】彙整 " + items.size() + " 項，頻率 " + frequency,
+            "[" + (isVersion ? "版本" : "CVE") + "排程通知] 專案【" + project.getName() + "】彙整 " + items.size() + " 項，頻率 " + frequency
+                + "（Teams: " + urls.size() + "、Email: " + emailsSent + "）",
             project.getName());
         stateService.persist();
 
         DigestResult result = new DigestResult();
         result.setSent(items.size());
         result.setRecipients(urls.size());
+        result.setEmailsSent(emailsSent);
         return result;
+    }
+
+    /** Sends a plain-text version of the digest to each checked Email recipient, independent of
+     * whether Teams Webhook is configured/enabled. Returns the number of emails successfully sent. */
+    private int dispatchEmail(Project project, String subject, boolean isVersion, List<?> visibleItems, int totalCount, int visibleCount) {
+        if (!project.isNotifyEmail()) return 0;
+        List<String> recipientIds = project.getNotifyEmailRecipientIds();
+        if (recipientIds == null || recipientIds.isEmpty()) return 0;
+        if (state.emailConfig == null || state.emailConfig.getSmtpServer() == null || state.emailConfig.getSmtpServer().isBlank()) {
+            logService.addLog("SYSTEM_INFO", "WARNING", "[專案通知略過] 專案【" + project.getName() + "】已勾選 Email 收件人，但系統尚未設定 SMTP，略過寄送", project.getName());
+            return 0;
+        }
+
+        List<String> emails = persistenceRepository.listProjectManagers().stream()
+            .filter(pm -> recipientIds.contains(String.valueOf(pm.get("id"))))
+            .map(pm -> pm.get("email") != null ? String.valueOf(pm.get("email")) : "")
+            .filter(email -> !email.isBlank())
+            .distinct()
+            .toList();
+        if (emails.isEmpty()) return 0;
+
+        StringBuilder body = new StringBuilder();
+        body.append("這是一封來自 SentinelCVE 資安監控平台的自動通知信。\n");
+        body.append("專案：").append(project.getName()).append(" (").append(project.getCode()).append(")\n");
+        body.append(isVersion ? "類型：產品版本更新通知\n" : "類型：CVE 弱點通知\n");
+        body.append("本次項目：").append(totalCount).append(" 項\n\n");
+        int i = 0;
+        for (Object o : visibleItems) {
+            i++;
+            if (isVersion) {
+                MonitoredProduct p = (MonitoredProduct) o;
+                body.append(i).append(". ").append(p.getName())
+                    .append(" | 目前版本: ").append(p.getCurrentVersion() != null ? p.getCurrentVersion() : "未設定")
+                    .append(" | 建議安全版本: ").append(p.getLatestSecureVersion() != null ? p.getLatestSecureVersion() : (p.getLatestVersion() != null ? p.getLatestVersion() : "尚無資料"))
+                    .append("\n");
+            } else {
+                CveItem c = (CveItem) o;
+                body.append(i).append(". ").append(c.getId()).append(" — ").append(c.getProductName())
+                    .append(" | CVSS: ").append(c.getCvss().getBaseScore()).append(" (").append(c.getCvss().getSeverity()).append(")")
+                    .append(c.isCisaKev() ? " | ⚠️ CISA KEV 已有在野利用" : "")
+                    .append("\n");
+            }
+        }
+        if (totalCount > visibleCount) {
+            body.append("\n本訊息列出前 ").append(visibleCount).append(" 項，其餘 ").append(totalCount - visibleCount).append(" 項請回系統查看。\n");
+        }
+
+        int sentCount = 0;
+        for (String email : emails) {
+            try {
+                mailService.sendMail(state.emailConfig, email, subject, body.toString());
+                sentCount++;
+            } catch (Exception err) {
+                logService.addLog("SYSTEM_INFO", "ERROR",
+                    "專案【" + project.getName() + "】Email 通知寄送失敗 (" + email + "): " + safeMessage(err),
+                    project.getName());
+            }
+        }
+        return sentCount;
     }
 
     public void applyVersionResult(MonitoredProduct product, ProductProviderService.VersionResult result) {

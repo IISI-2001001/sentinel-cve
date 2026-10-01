@@ -28,6 +28,7 @@ interface NavbarProps {
   onTriggerScan: () => void;
   onAcknowledgeAlert: (id: string) => void;
   onSelectCve: (cveId: string) => void;
+  onRefreshData: () => Promise<void>;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -39,9 +40,20 @@ export const Navbar: React.FC<NavbarProps> = ({
   onTriggerScan,
   onAcknowledgeAlert,
   onSelectCve,
+  onRefreshData,
 }) => {
 
   const [showBellDropdown, setShowBellDropdown] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await onRefreshData();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const unreadAlerts = notifications.filter((n) => n.status === 'UNREAD');
   const criticalCount = unreadAlerts.filter((n) => n.severity === 'CRITICAL').length;
@@ -79,6 +91,21 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Right Action Bar */}
           <div className="flex items-center space-x-2.5">
+            {/* Manual Refresh Button (replaces removed auto-polling) */}
+            <button
+              onClick={handleManualRefresh}
+              disabled={isRefreshing}
+              title="手動重新整理畫面資料"
+              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all shadow-2xs ${
+                isRefreshing
+                  ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                  : 'bg-slate-50 border-slate-200 hover:bg-slate-100 hover:border-slate-300 text-slate-700'
+              }`}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{isRefreshing ? '刷新中...' : '重新整理'}</span>
+            </button>
+
             {/* Quick Manual Scan Button */}
             <button
               onClick={onTriggerScan}

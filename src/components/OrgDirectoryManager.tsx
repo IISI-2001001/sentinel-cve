@@ -4,6 +4,7 @@ import { Building2, UserCheck, Plus, Trash2, AlertCircle, CheckCircle2 } from 'l
 interface OrgEntry {
   id: string;
   name: string;
+  email?: string;
   createdAt: string;
 }
 
@@ -21,8 +22,10 @@ export const OrgDirectoryManager: React.FC = () => {
 
   const [newDeptName, setNewDeptName] = useState('');
   const [newPmName, setNewPmName] = useState('');
+  const [newPmEmail, setNewPmEmail] = useState('');
   const [savingDept, setSavingDept] = useState(false);
   const [savingPm, setSavingPm] = useState(false);
+  const [savingEmailId, setSavingEmailId] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -86,29 +89,52 @@ export const OrgDirectoryManager: React.FC = () => {
       const res = await fetch('/api/org-directory/project-managers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newPmName.trim() }),
+        body: JSON.stringify({ name: newPmName.trim(), email: newPmEmail.trim() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `新增失敗 (HTTP ${res.status})`);
-      setNotice(`已新增專案經理「${newPmName.trim()}」。`);
+      setNotice(`已新增使用者「${newPmName.trim()}」。`);
       setNewPmName('');
+      setNewPmEmail('');
       await load();
     } catch (err: any) {
-      setError(err.message || '新增專案經理失敗');
+      setError(err.message || '新增使用者失敗');
     } finally {
       setSavingPm(false);
     }
   };
 
+  const handleUpdateProjectManagerEmail = async (entry: OrgEntry, email: string) => {
+    if ((entry.email || '') === email) return;
+    setSavingEmailId(entry.id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/org-directory/project-managers/${encodeURIComponent(entry.id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `更新失敗 (HTTP ${res.status})`);
+      }
+      await load();
+    } catch (err: any) {
+      setError(err.message || '更新 Email 失敗');
+    } finally {
+      setSavingEmailId(null);
+    }
+  };
+
   const handleDeleteProjectManager = async (entry: OrgEntry) => {
-    if (!window.confirm(`確定要刪除專案經理「${entry.name}」嗎？`)) return;
+    if (!window.confirm(`確定要刪除使用者「${entry.name}」嗎？`)) return;
     setError(null);
     try {
       const res = await fetch(`/api/org-directory/project-managers/${encodeURIComponent(entry.id)}`, { method: 'DELETE' });
       if (!res.ok) throw new Error(`刪除失敗 (HTTP ${res.status})`);
       await load();
     } catch (err: any) {
-      setError(err.message || '刪除專案經理失敗');
+      setError(err.message || '刪除使用者失敗');
     }
   };
 
@@ -177,12 +203,12 @@ export const OrgDirectoryManager: React.FC = () => {
           </div>
         </div>
 
-        {/* Project Managers */}
+        {/* Project Managers / Users */}
         <div className="border border-slate-200 rounded-2xl overflow-hidden">
           <div className="bg-slate-50 border-b border-slate-200 p-4 space-y-3">
             <div className="text-xs font-bold text-slate-700 uppercase flex items-center space-x-1.5">
               <UserCheck className="w-3.5 h-3.5 text-blue-600" />
-              <span>專案經理清單</span>
+              <span>使用者清單</span>
             </div>
             <div className="flex items-center gap-2">
               <input
@@ -190,7 +216,15 @@ export const OrgDirectoryManager: React.FC = () => {
                 value={newPmName}
                 onChange={(e) => setNewPmName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAddProjectManager()}
-                placeholder="輸入專案經理姓名"
+                placeholder="輸入姓名"
+                className="flex-1 bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-medium focus:outline-none focus:border-blue-500 shadow-2xs"
+              />
+              <input
+                type="email"
+                value={newPmEmail}
+                onChange={(e) => setNewPmEmail(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddProjectManager()}
+                placeholder="Email（選填）"
                 className="flex-1 bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-medium focus:outline-none focus:border-blue-500 shadow-2xs"
               />
               <button
@@ -207,16 +241,24 @@ export const OrgDirectoryManager: React.FC = () => {
           <div className="divide-y divide-slate-100">
             {loading && <div className="px-4 py-6 text-center text-slate-400 text-xs">載入中...</div>}
             {!loading && projectManagers.length === 0 && (
-              <div className="px-4 py-6 text-center text-slate-400 text-xs">尚無專案經理資料，請於上方新增。</div>
+              <div className="px-4 py-6 text-center text-slate-400 text-xs">尚無使用者資料，請於上方新增。</div>
             )}
             {!loading &&
               projectManagers.map((entry) => (
-                <div key={entry.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-50/60">
-                  <span className="text-xs font-bold text-slate-900">{entry.name}</span>
+                <div key={entry.id} className="flex items-center justify-between gap-2 px-4 py-2.5 hover:bg-slate-50/60">
+                  <span className="text-xs font-bold text-slate-900 shrink-0">{entry.name}</span>
+                  <input
+                    type="email"
+                    defaultValue={entry.email || ''}
+                    placeholder="尚未設定 Email"
+                    disabled={savingEmailId === entry.id}
+                    onBlur={(e) => handleUpdateProjectManagerEmail(entry, e.target.value.trim())}
+                    className="flex-1 min-w-0 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-blue-500 placeholder:text-slate-400"
+                  />
                   <button
                     type="button"
                     onClick={() => handleDeleteProjectManager(entry)}
-                    className="p-1.5 rounded-lg hover:bg-red-50 text-red-600"
+                    className="p-1.5 rounded-lg hover:bg-red-50 text-red-600 shrink-0"
                     title="刪除"
                   >
                     <Trash2 className="w-3.5 h-3.5" />

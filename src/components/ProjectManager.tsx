@@ -38,6 +38,7 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  Mail,
 } from 'lucide-react';
 import { Project, MonitoredProduct, EmailNotificationConfig, Ticket, TicketStatus, TicketPriority, TicketCveInfo, ActionStep, ProjectProductBinding, CVEItem } from '../types';
 import { TicketDetailModal } from './TicketDetailModal';
@@ -120,14 +121,15 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   // Org directory (departments / project managers) maintained in 系統管理與設定中心,
   // used to populate the dropdowns in the 新增/編輯專案 form.
   const [orgDepartments, setOrgDepartments] = useState<string[]>([]);
-  const [orgProjectManagers, setOrgProjectManagers] = useState<string[]>([]);
+  const [orgUsers, setOrgUsers] = useState<{ id: string; name: string; email?: string }[]>([]);
+  const orgProjectManagers = orgUsers.map((u) => u.name);
 
   useEffect(() => {
     fetch('/api/org-directory')
       .then((res) => res.json())
       .then((data) => {
         setOrgDepartments((data.departments || []).map((d: { name: string }) => d.name));
-        setOrgProjectManagers((data.projectManagers || []).map((p: { name: string }) => p.name));
+        setOrgUsers(data.projectManagers || []);
       })
       .catch((err) => console.warn('Failed to fetch org directory:', err));
   }, []);
@@ -500,8 +502,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     'REALTIME' | 'EVERY_15_MIN' | 'HOURLY' | 'DAILY' | 'WEEKLY'
   >('REALTIME');
   const [formTeamsWebhookUrl, setFormTeamsWebhookUrl] = useState('');
-  const [formHandlerName, setFormHandlerName] = useState('');
-  const [formHandlerTeamsWebhookUrl, setFormHandlerTeamsWebhookUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Product Binding Form State (For level 2 detail page)
@@ -572,8 +572,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     setFormNotifyCisaKevOnly(false);
     setFormNotifyFrequency('REALTIME');
     setFormTeamsWebhookUrl('');
-    setFormHandlerName('');
-    setFormHandlerTeamsWebhookUrl('');
     setIsCreating(true);
   };
 
@@ -591,9 +589,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     setFormNotifyMinCvss(prj.notifyMinCvss || 7.0);
     setFormNotifyCisaKevOnly(prj.notifyCisaKevOnly || false);
     setFormNotifyFrequency(prj.notifyFrequency || 'REALTIME');
-    setFormTeamsWebhookUrl(prj.ownerTeamsWebhookUrl || prj.teamsWebhookUrl || '');
-    setFormHandlerName(prj.handlerName || '');
-    setFormHandlerTeamsWebhookUrl(prj.handlerTeamsWebhookUrl || '');
+    setFormTeamsWebhookUrl(prj.teamsWebhookUrl || '');
     setIsCreating(true);
   };
 
@@ -619,9 +615,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
       notifyCisaKevOnly: formNotifyCisaKevOnly,
       notifyFrequency: formNotifyFrequency,
       teamsWebhookUrl: formTeamsWebhookUrl,
-      ownerTeamsWebhookUrl: formTeamsWebhookUrl,
-      handlerName: formHandlerName,
-      handlerTeamsWebhookUrl: formHandlerTeamsWebhookUrl,
     };
 
     try {
@@ -873,8 +866,8 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     }
   };
 
-  const handleTestTeamsDispatch = async (prj: Project, webhookType: 'owner' | 'handler' = 'owner') => {
-    const webhookUrl = webhookType === 'handler' ? (prj.handlerTeamsWebhookUrl || formHandlerTeamsWebhookUrl) : (prj.ownerTeamsWebhookUrl || prj.teamsWebhookUrl || formTeamsWebhookUrl);
+  const handleTestTeamsDispatch = async (prj: Project) => {
+    const webhookUrl = prj.teamsWebhookUrl || formTeamsWebhookUrl;
     if (!webhookUrl) {
       alert('請先填寫專案的 Teams Webhook URL');
       return;
@@ -885,7 +878,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
       const res = await fetch(`/api/projects/${prj.id}/notify-teams-test`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ webhookUrl, webhookType }),
+        body: JSON.stringify({ webhookUrl }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -1169,7 +1162,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               版本 {getFrequencyLabel(prj.versionNotifyFrequency || 'DAILY').label} / CVE {getFrequencyLabel(prj.cveNotifyFrequency || prj.notifyFrequency).label}
             </div>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              {(prj.ownerTeamsWebhookUrl || prj.teamsWebhookUrl) ? '負責人 Teams 已設定' : '負責人 Teams 未設定'} / {prj.handlerTeamsWebhookUrl ? '處理人 Teams 已設定' : '處理人 Teams 未設定'}
+              {prj.teamsNotifyEnabled !== false && prj.teamsWebhookUrl ? 'Teams Webhook 已啟用' : 'Teams Webhook 未啟用'} / {prj.notifyEmail && (prj.notifyEmailRecipientIds?.length || 0) > 0 ? `Email 已設定 ${prj.notifyEmailRecipientIds!.length} 位` : 'Email 未設定收件人'}
             </p>
           </div>
         </div>
@@ -1678,31 +1671,45 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-900 flex items-center space-x-1.5">
                     <MessageSquare className="w-4 h-4 text-indigo-600" />
-                    <span>專案負責人／處理人 Teams Webhook</span>
+                    <span>Teams Webhook</span>
                   </span>
 
-                  <button
-                    onClick={() => handleTestTeamsDispatch(prj, 'owner')}
-                    disabled={testingTeamsPrjId === prj.id}
-                    className="px-3 py-1 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center space-x-1 border border-indigo-200 transition-colors"
-                  >
-                    <Send className={`w-3 h-3 ${testingTeamsPrjId === prj.id ? 'animate-bounce' : ''}`} />
-                    <span>{testingTeamsPrjId === prj.id ? '推播中...' : '測試負責人 Webhook'}</span>
-                  </button>
+                  <div className="flex items-center space-x-3">
+                    <label className="inline-flex items-center gap-2 text-[11px] font-bold text-slate-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={prj.teamsNotifyEnabled !== false}
+                        onChange={async (e) => {
+                          const res = await fetch(`/api/projects/${prj.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ teamsNotifyEnabled: e.target.checked }) });
+                          if (res.ok) { const updated = await res.json(); setActiveProjectDetail(updated); onRefreshData(); }
+                        }}
+                        className="rounded border-slate-300"
+                      />
+                      啟用 Teams Webhook 通知
+                    </label>
+                    <button
+                      onClick={() => handleTestTeamsDispatch(prj)}
+                      disabled={testingTeamsPrjId === prj.id || !prj.teamsWebhookUrl}
+                      className="px-3 py-1 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center space-x-1 border border-indigo-200 transition-colors disabled:opacity-40"
+                    >
+                      <Send className={`w-3 h-3 ${testingTeamsPrjId === prj.id ? 'animate-bounce' : ''}`} />
+                      <span>{testingTeamsPrjId === prj.id ? '推播中...' : '測試 Teams Webhook'}</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-3">
-                  <label className="block text-[11px] font-bold text-slate-600">負責人 Webhook URL</label>
+                  <label className="block text-[11px] font-bold text-slate-600">Webhook URL</label>
                   <input
                     type="url"
-                    defaultValue={prj.ownerTeamsWebhookUrl || prj.teamsWebhookUrl || ''}
+                    defaultValue={prj.teamsWebhookUrl || ''}
                     onBlur={async (e) => {
                       const newUrl = e.target.value.trim();
-                      if (newUrl !== (prj.ownerTeamsWebhookUrl || prj.teamsWebhookUrl || '')) {
+                      if (newUrl !== (prj.teamsWebhookUrl || '')) {
                         const res = await fetch(`/api/projects/${prj.id}`, {
                           method: 'PUT',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ ownerTeamsWebhookUrl: newUrl, teamsWebhookUrl: newUrl }),
+                          body: JSON.stringify({ teamsWebhookUrl: newUrl }),
                         });
                         if (res.ok) {
                           const updated = await res.json();
@@ -1714,16 +1721,60 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     placeholder="https://company.webhook.office.com/webhookb2/..."
                     className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:border-indigo-500 shadow-2xs"
                   />
-                  <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr_auto] gap-2 items-end">
-                    <label className="text-[11px] font-bold text-slate-600">處理人姓名
-                      <input defaultValue={prj.handlerName || ''} onBlur={async (e) => { const res = await fetch(`/api/projects/${prj.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ handlerName: e.target.value.trim() }) }); if (res.ok) setActiveProjectDetail(await res.json()); }} className="mt-1 w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-normal" />
-                    </label>
-                    <label className="text-[11px] font-bold text-slate-600">處理人 Webhook URL
-                      <input type="url" defaultValue={prj.handlerTeamsWebhookUrl || ''} onBlur={async (e) => { const res = await fetch(`/api/projects/${prj.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ handlerTeamsWebhookUrl: e.target.value.trim() }) }); if (res.ok) { setActiveProjectDetail(await res.json()); onRefreshData(); } }} className="mt-1 w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
-                    </label>
-                    <button onClick={() => handleTestTeamsDispatch(prj, 'handler')} disabled={testingTeamsPrjId === prj.id || !prj.handlerTeamsWebhookUrl} className="px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold text-xs disabled:opacity-40">測試處理人</button>
-                  </div>
                 </div>
+              </div>
+
+              {/* Email 通知收件人 Box */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-900 flex items-center space-x-1.5">
+                    <Mail className="w-4 h-4 text-blue-600" />
+                    <span>Email 通知收件人</span>
+                  </span>
+                  <label className="inline-flex items-center gap-2 text-[11px] font-bold text-slate-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={prj.notifyEmail}
+                      onChange={async (e) => {
+                        const res = await fetch(`/api/projects/${prj.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notifyEmail: e.target.checked }) });
+                        if (res.ok) { const updated = await res.json(); setActiveProjectDetail(updated); onRefreshData(); }
+                      }}
+                      className="rounded border-slate-300"
+                    />
+                    啟用 Email 通知
+                  </label>
+                </div>
+
+                {prj.notifyEmail && (
+                  orgUsers.filter((u) => u.email).length === 0 ? (
+                    <p className="text-[11px] text-slate-500">
+                      目前「使用者清單」中沒有任何使用者填寫 Email，請先前往「系統管理 &gt; 組織清單管理」設定使用者 Email 後再回來勾選收件人。
+                    </p>
+                  ) : (
+                    <div className="divide-y divide-slate-200 bg-white border border-slate-200 rounded-xl overflow-hidden">
+                      {orgUsers.filter((u) => u.email).map((u) => {
+                        const checked = (prj.notifyEmailRecipientIds || []).includes(u.id);
+                        return (
+                          <label key={u.id} className="flex items-center gap-2.5 px-3 py-2 text-xs text-slate-700 cursor-pointer hover:bg-slate-50">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={async (e) => {
+                                const current = prj.notifyEmailRecipientIds || [];
+                                const next = e.target.checked ? [...current, u.id] : current.filter((id) => id !== u.id);
+                                const res = await fetch(`/api/projects/${prj.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notifyEmailRecipientIds: next }) });
+                                if (res.ok) { const updated = await res.json(); setActiveProjectDetail(updated); onRefreshData(); }
+                              }}
+                              className="rounded border-slate-300"
+                            />
+                            <span className="font-bold">{u.name}</span>
+                            <span className="text-slate-400">&lt;{u.email}&gt;</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )
+                )}
               </div>
 
               {/* CVE Thresholds Box */}
@@ -3018,15 +3069,15 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                       <div className="flex items-center space-x-1">
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            (prj.ownerTeamsWebhookUrl || prj.teamsWebhookUrl)
+                            prj.teamsNotifyEnabled !== false && prj.teamsWebhookUrl
                               ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
                               : 'bg-slate-100 text-slate-400'
                           }`}
                         >
-                          {(prj.ownerTeamsWebhookUrl || prj.teamsWebhookUrl) ? '負責人 Teams' : '負責人未設'}
+                          {prj.teamsNotifyEnabled !== false && prj.teamsWebhookUrl ? 'Teams 已啟用' : 'Teams 未啟用'}
                         </span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${prj.handlerTeamsWebhookUrl ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-slate-100 text-slate-400'}`}>
-                          {prj.handlerTeamsWebhookUrl ? '處理人 Teams' : '處理人未設'}
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${prj.notifyEmail && (prj.notifyEmailRecipientIds?.length || 0) > 0 ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-slate-100 text-slate-400'}`}>
+                          {prj.notifyEmail && (prj.notifyEmailRecipientIds?.length || 0) > 0 ? `Email ${prj.notifyEmailRecipientIds!.length} 位` : 'Email 未設定'}
                         </span>
                       </div>
                     </div>

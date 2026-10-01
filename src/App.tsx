@@ -94,8 +94,6 @@ export default function App() {
 
   useEffect(() => {
     reloadServerData();
-    const interval = setInterval(reloadServerData, 10000);
-    return () => clearInterval(interval);
   }, []);
 
   const handleTriggerScan = async () => {
@@ -145,6 +143,7 @@ export default function App() {
           onTriggerScan={handleTriggerScan}
           onAcknowledgeAlert={handleAcknowledgeAlert}
           onSelectCve={(cveId) => setSelectedCveId(cveId)}
+          onRefreshData={reloadServerData}
         />
 
         {!dbConnected && (

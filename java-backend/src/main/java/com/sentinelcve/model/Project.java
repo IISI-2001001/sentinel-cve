@@ -33,9 +33,8 @@ public class Project {
     private String cveNotifyNextRunAt;
     private String cveNotifyLastSignature;
     private String teamsWebhookUrl;
-    private String ownerTeamsWebhookUrl;
-    private String handlerName;
-    private String handlerTeamsWebhookUrl;
+    private Boolean teamsNotifyEnabled;
+    private List<String> notifyEmailRecipientIds; // project_managers.id 清單，Email 通知收件人（僅於 notifyEmail=true 時生效）
     private double notifyMinCvss;
     private boolean notifyCisaKevOnly;
     private String createdAt;

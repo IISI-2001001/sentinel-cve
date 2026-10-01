@@ -114,6 +114,7 @@ public class PersistenceRepository {
             CREATE INDEX IF NOT EXISTS idx_cves_cisa_kev ON cves (cisa_kev);
             CREATE INDEX IF NOT EXISTS idx_notifications_status ON notifications (status);
             ALTER TABLE products DROP COLUMN IF EXISTS criticality;
+            ALTER TABLE project_managers ADD COLUMN IF NOT EXISTS email TEXT;
             """);
     }
 
@@ -195,22 +196,40 @@ public class PersistenceRepository {
     }
 
     public List<java.util.Map<String, Object>> listProjectManagers() {
-        return jdbc.query("SELECT id, name, created_at FROM project_managers ORDER BY name ASC", orgEntryMapper());
+        return jdbc.query("SELECT id, name, email, created_at FROM project_managers ORDER BY name ASC", orgEntryMapperWithEmail());
     }
 
-    public java.util.Map<String, Object> addProjectManager(String name) {
+    public java.util.Map<String, Object> addProjectManager(String name, String email) {
         String id = "pm-" + System.currentTimeMillis();
         jdbc.update("""
-            INSERT INTO project_managers (id, name) VALUES (?, ?)
+            INSERT INTO project_managers (id, name, email) VALUES (?, ?, ?)
             ON CONFLICT (name) DO NOTHING
-            """, id, name);
+            """, id, name, email);
         List<java.util.Map<String, Object>> rows = jdbc.query(
-            "SELECT id, name, created_at FROM project_managers WHERE name = ?", orgEntryMapper(), name);
+            "SELECT id, name, email, created_at FROM project_managers WHERE name = ?", orgEntryMapperWithEmail(), name);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    public java.util.Map<String, Object> updateProjectManager(String id, String email) {
+        jdbc.update("UPDATE project_managers SET email = ? WHERE id = ?", email, id);
+        List<java.util.Map<String, Object>> rows = jdbc.query(
+            "SELECT id, name, email, created_at FROM project_managers WHERE id = ?", orgEntryMapperWithEmail(), id);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
     public void deleteProjectManager(String id) {
         jdbc.update("DELETE FROM project_managers WHERE id = ?", id);
+    }
+
+    private RowMapper<java.util.Map<String, Object>> orgEntryMapperWithEmail() {
+        return (rs, rowNum) -> {
+            java.util.LinkedHashMap<String, Object> row = new java.util.LinkedHashMap<>();
+            row.put("id", rs.getString("id"));
+            row.put("name", rs.getString("name"));
+            row.put("email", rs.getString("email"));
+            row.put("createdAt", rs.getTimestamp("created_at").toInstant().toString());
+            return row;
+        };
     }
 
     private RowMapper<java.util.Map<String, Object>> orgEntryMapper() {

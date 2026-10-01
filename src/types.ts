@@ -158,9 +158,8 @@ export interface Project {
   cveNotifyNextRunAt?: string;
   cveNotifyLastSignature?: string;
   teamsWebhookUrl?: string; // 個別專案 Webhook 頻道
-  ownerTeamsWebhookUrl?: string;
-  handlerName?: string;
-  handlerTeamsWebhookUrl?: string;
+  teamsNotifyEnabled?: boolean; // 是否啟用 Teams Webhook 通知（不清空URL也能暫停通知）
+  notifyEmailRecipientIds?: string[]; // 勾選的 Email 通知收件人（使用者清單 project_managers.id）
   notifyMinCvss: number;
   notifyCisaKevOnly: boolean;
   createdAt: string;
