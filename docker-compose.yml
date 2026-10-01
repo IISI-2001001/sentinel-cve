@@ -17,27 +17,44 @@ services:
       timeout: 5s
       retries: 5
 
-  sentinel-cve:
+  backend:
     build:
       context: .
       dockerfile: java-backend/Dockerfile
-    container_name: sentinel-cve-app
+    container_name: sentinel-cve-backend
     restart: always
     depends_on:
       postgres:
         condition: service_healthy
     ports:
-      - "3000:8080"
+      - "5173:5173"
     environment:
-      - PORT=8080
+      - PORT=5173
       - NVD_API_KEY=${NVD_API_KEY:-}
-      - APP_URL=${APP_URL:-http://localhost:3000}
+      - APP_URL=${APP_URL:-http://localhost:8080}
       - DATABASE_URL=postgres://${POSTGRES_USER:-sentinel}:${POSTGRES_PASSWORD:-sentinel}@postgres:5432/${POSTGRES_DB:-sentinel_cve}
       - SEED_DEMO_DATA=${SEED_DEMO_DATA:-false}
     volumes:
       - dbconfig:/app/config
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/api/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:5173/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: sentinel-cve-frontend
+    restart: always
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/"]
       interval: 30s
       timeout: 5s
       retries: 3

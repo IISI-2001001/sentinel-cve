@@ -12,6 +12,8 @@ export default defineConfig(() => {
       },
     },
     server: {
+      // Local dev frontend port (backend runs on 5173; see application.yml).
+      port: 8080,
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
@@ -20,7 +22,7 @@ export default defineConfig(() => {
       // Proxy API calls to the local backend during `npm run dev` (mirrors nginx's /api routing in production).
       proxy: {
         '/api': {
-          target: process.env.VITE_API_PROXY_TARGET || 'http://localhost:8080',
+          target: process.env.VITE_API_PROXY_TARGET || 'http://localhost:5173',
           changeOrigin: true,
         },
       },

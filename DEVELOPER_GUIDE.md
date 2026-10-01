@@ -33,7 +33,7 @@ Spring Boot app（`java-backend/` / `sentinel-cve-server.jar`）
     └─ PostgreSQL（每集合一張表，`data JSONB`；啟動時載入 `AppState`，異動後非同步寫回）
 ```
 
-生產模式中 Spring Boot 內建 Tomcat 同時提供 `/api/*` 與打包進 Jar 的前端靜態資源。開發模式通常以前端 Vite dev server（5173）與後端 Spring Boot（8080）分離埠號運作；後端啟動時會由 `SentinelCveApplication` 的 `CommandLineRunner` 呼叫 `stateService.initAndLoad()`，先完成 PostgreSQL 初始化與狀態載入。
+生產模式採前後端各自獨立容器：前端容器（Nginx）提供打包後的靜態檔案並將 `/api/*` proxy 到後端容器；後端容器（Spring Boot）僅提供 `/api/*`，不再內含前端靜態資源。開發模式則以前端 Vite dev server（8080）與後端 Spring Boot（5173）分離埠號運作，`vite.config.ts` 內建 proxy 會自動把 `/api/*` 轉送到後端；後端啟動時會由 `SentinelCveApplication` 的 `CommandLineRunner` 呼叫 `stateService.initAndLoad()`，先完成 PostgreSQL 初始化與狀態載入。
 
 ## 3. 檔案與程式用途
 
@@ -71,7 +71,7 @@ Spring Boot app（`java-backend/` / `sentinel-cve-server.jar`）
 | `java-backend/src/main/java/com/sentinelcve/config/DataSourceConfig.java` | 建立 HikariCP `DataSource`：優先讀取 `java-backend/config/db.properties`（由「資料庫連線管理」UI 寫入），其次 `DATABASE_URL`，最後 PG* 環境變數。 |
 | `java-backend/src/main/java/com/sentinelcve/config/DbConfigFileStore.java` / `db/DatabaseUrlUtil.java` | 讀寫本機 `config/db.properties` 覆寫檔，並負責 `postgres://user:pass@host:port/db` URL 的拆解/組裝。 |
 | `java-backend/src/main/java/com/sentinelcve/provider/ProductProviderService.java` | 官方版本與 CVE 相關 provider；負責 HTTP timeout、版本解析、穩定版篩選、NVD/OSV 映射，以及 NVD CPE 查詢（供 CPE 對照快取使用）。 |
-| `docker-compose.yml` | 啟動 PostgreSQL 與 Spring Boot 應用；由 `java-backend/Dockerfile` 建置，對外映射 `3000:8080`，並設定 DB/app healthcheck。 |
+| `docker-compose.yml` | 啟動 PostgreSQL、後端(Spring Boot)、前端(Nginx) 三個服務；後端由 `java-backend/Dockerfile` 建置，對外映射 `5173:5173`；前端由 `Dockerfile.frontend` 建置，對外映射 `8080:8080` 並透過 `nginx.frontend.conf` 把 `/api/*` proxy 到後端；皆設定 healthcheck。 |
 | `.dockerignore` | 排除 dependencies、dist、Git、`.env` 與本機器雜項。 |
 | `package.json` | 前端專用 scripts 與 npm dependencies；`dev` 為 `vite`、`build` 為 `vite build`、`lint` 為 `tsc --noEmit`。 |
 | `README.md` | 專案基礎啟動說明；實作細節以本文件為準。 |
@@ -296,7 +296,7 @@ mvn -q -DskipTests package
 - `npm run lint` 是 TypeScript `--noEmit` 檢查。
 - `npm run build` 僅建置 Vite 前端靜態檔案。
 - `mvn test` 執行 Spring Boot 後端測試；`mvn -q -DskipTests package` 會產出 `target/sentinel-cve-server.jar`。
-- 健康檢查：`GET http://localhost:3000/api/health`。
+- 健康檢查：`GET http://localhost:5173/api/health`（後端容器）或 `GET http://localhost:8080/api/health`（經由前端 nginx proxy）。
 - 修改排程時必須測試：首次發送、無變化去重、Webhook 失敗重試、手動強制發送、CLOSED 排除、last/next run 更新。
 - 修改 Provider 時必須測試穩定版篩選、rate limit、timeout、網頁格式變更與無結果情境。
 
@@ -304,15 +304,16 @@ mvn -q -DskipTests package
 
 ```bash
 docker compose up -d --build
-docker inspect --format '{{.State.Health.Status}}' sentinel-cve-app
+docker inspect --format '{{.State.Health.Status}}' sentinel-cve-backend
+docker inspect --format '{{.State.Health.Status}}' sentinel-cve-frontend
 ```
 
 環境變數：
 
 | 變數 | 用途 |
 |---|---|
-| `PORT` | Spring Boot / Embedded Tomcat 埠號；容器內預設 8080，Compose 對外映射為 3000。 |
-| `APP_URL` | 應用對外 URL，用於需要連結的訊息。 |
+| `PORT` | Spring Boot 後端容器內部埠號；預設 5173，Compose 對外同樣映射為 5173。前端容器(Nginx)固定對外映射 8080，不受此變數影響。 |
+| `APP_URL` | 應用對外 URL（前端容器的對外網址，例如 `http://localhost:8080`），用於需要連結的訊息。 |
 | `DATABASE_URL` | PostgreSQL 連線字串；後端所有狀態資料皆持久化於此。 |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `docker-compose.yml` 啟動 PostgreSQL 時使用，並用來組裝預設 `DATABASE_URL`。 |
 | `SEED_DEMO_DATA` | `true` 時，首次連到空資料庫會匯入示範資料。 |

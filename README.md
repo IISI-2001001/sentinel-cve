@@ -52,19 +52,26 @@
 
 ## 🏗️ 前後端系統架構說明
 
-SentinelCVE 採用 **Full-Stack (Java 21/Spring Boot 3 + React/Vite)** 一體化架構。前端開發時透過 Vite dev server 提供熱重載；生產環境則由 Multi-stage Dockerfile 建置 Vite 靜態檔案並打包進 Spring Boot 的可執行 Fat Jar (`sentinel-cve-server.jar`)，由內建 Tomcat 同時提供 REST API 與前端靜態資源。
+SentinelCVE 採用 **Full-Stack (Java 21/Spring Boot 3 + React/Vite)** 架構。前端開發時透過 Vite dev server 提供熱重載；生產環境以 **前後端各自獨立的 Docker 容器** 部署：前端容器由 Nginx 提供 Vite 打包後的靜態檔案，並將 `/api/*` 請求 reverse proxy 到後端容器；後端容器則是純 Spring Boot 可執行 Fat Jar (`sentinel-cve-server.jar`)，僅提供 REST API（不再內含前端靜態資源）。
 
 ```
                        ┌─────────────────────────────────────────────────┐
                        │          Client Browser (User Interface)        │
                        └────────────────────────┬────────────────────────┘
                                                 │
-                                    REST API / HTTP (Port 3000 → 8080)
+                                      HTTP (Port 8080, Frontend)
                                                 │
                        ┌────────────────────────▼────────────────────────┐
-                       │   Spring Boot App (sentinel-cve-server.jar)     │
+                       │   Frontend Container (Nginx + Vite dist/)        │
+                       │  • 提供打包後的靜態頁面 (/, /assets/*)            │
+                       │  • /api/* 請求 proxy_pass 轉送到 backend 容器     │
+                       └────────────────────────┬────────────────────────┘
+                                                │
+                                   Docker Network (proxy_pass, Port 5173)
+                                                │
+                       ┌────────────────────────▼────────────────────────┐
+                       │   Backend Container (sentinel-cve-server.jar)   │
                        ├─────────────────────────────────────────────────┤
-                       │  • Embedded Tomcat & Static Asset Handler       │
                        │  • RESTful API Controllers (/api/*)             │
                        │  • Background Scheduler (@Scheduled, 30s tick)  │
                        └───────────┬─────────────┬───────────────────────┘
@@ -125,11 +132,11 @@ SentinelCVE 採用 **Full-Stack (Java 21/Spring Boot 3 + React/Vite)** 一體化
 # NVD API Key (選填：用於提升呼叫 NIST NVD REST API 的速率上限，未設定則以匿名方式呼叫)
 NVD_API_KEY="your_nvd_api_key_here"
 
-# 服務執行埠號 (容器內部埠號，預設為 8080；對外仍以 3000 訪問)
-PORT=8080
+# 服務執行埠號 (後端容器內部埠號，預設為 5173；前端容器對外為 8080)
+PORT=5173
 
-# 應用程式對外網址
-APP_URL="http://localhost:3000"
+# 應用程式對外網址 (前端容器的對外網址)
+APP_URL="http://localhost:8080"
 
 # PostgreSQL 連線字串 (應用程式狀態資料庫：產品、CVE、工單、專案、日誌等)
 # 使用 docker-compose 時會自動組裝好，僅在連接外部/既有 PostgreSQL 時才需覆寫。
@@ -139,24 +146,27 @@ POSTGRES_PASSWORD="sentinel"
 POSTGRES_DB="sentinel_cve"
 ```
 
-> 💡 也可以在啟動後改由「系統管理 > 🗄️ 資料庫連線管理」頁面設定/切換 PostgreSQL 連線，設定值會寫入後端本機檔案 `java-backend/config/db.properties`（Docker 部署時建議掛載為具名 volume 以持久化），其優先權高於 `DATABASE_URL` 環境變數；儲存後需重新啟動後端服務（或 `docker compose restart sentinel-cve`）才會套用。
+> 💡 也可以在啟動後改由「系統管理 > 🗄️ 資料庫連線管理」頁面設定/切換 PostgreSQL 連線，設定值會寫入後端本機檔案 `java-backend/config/db.properties`（Docker 部署時建議掛載為具名 volume 以持久化），其優先權高於 `DATABASE_URL` 環境變數；儲存後需重新啟動後端服務（或 `docker compose restart backend`）才會套用。
 
 ---
 
 ## 🐳 Docker 容器化與建構說明
 
-本專案提供符合資安規範與效能最佳化的 Dockerfile 與 Docker Compose 配置。
+本專案的正式環境採用**前後端各自獨立的容器**：前端容器（Nginx）負責提供打包後的靜態檔案並將 `/api/*` 請求 proxy 到後端；後端容器（Spring Boot）僅提供 REST API，不再內含前端靜態資源。
 
-### 多階段建構 Dockerfile
+### Dockerfile 說明
 
-Dockerfile (`java-backend/Dockerfile`) 採用三階段建構 (Multi-stage Build)：
-1. **Stage 1 (`frontend`)**：使用 `node:20-alpine` 安裝前端依賴並執行 `npm run build`，產出 Vite 靜態檔案 (`dist/`)。
-2. **Stage 2 (`backend`)**：使用 `maven:3.9-eclipse-temurin-21`，將 Stage 1 產出的靜態檔案複製進 `src/main/resources/static`，再執行 `mvn clean package` 打包成單一 Fat Jar (`sentinel-cve-server.jar`)。
-3. **Stage 3 (runtime)**：使用純淨 `eclipse-temurin:21-jre-alpine`，僅複製最終 Jar 檔案，以 `ENTRYPOINT ["java","-jar","/app/app.jar"]` 啟動，`EXPOSE 8080`，體積精簡且不含建構工具鏈。
+**後端** (`java-backend/Dockerfile`，雙階段建構)：
+1. **Stage 1 (`backend`)**：使用 `maven:3.9-eclipse-temurin-21`，執行 `mvn clean package` 打包成單一 Fat Jar (`sentinel-cve-server.jar`)。
+2. **Stage 2 (runtime)**：使用純淨 `eclipse-temurin:21-jre-alpine`，僅複製最終 Jar 檔案，以 `ENTRYPOINT ["java","-jar","/app/app.jar"]` 啟動，`EXPOSE 5173`，體積精簡且不含建構工具鏈。
+
+**前端** (`Dockerfile.frontend`，雙階段建構)：
+1. **Stage 1 (`build`)**：使用 `node:20-alpine` 安裝依賴並執行 `npm run build`，產出 Vite 靜態檔案 (`dist/`)。
+2. **Stage 2 (`nginx`)**：使用 `nginx:alpine`，複製 `dist/` 到 `/usr/share/nginx/html`，並套用 `nginx.frontend.conf`（SPA fallback + `/api/` reverse proxy 到後端容器），`EXPOSE 8080`。
 
 ### Docker Compose 服務配置
 
-`docker-compose.yml` 內含 `postgres`（PostgreSQL 16，資料存於具名 volume `pgdata`，並以 `pg_isready` 做健康檢查）與 `sentinel-cve`（Spring Boot 應用程式，`depends_on` 等待資料庫健康後才啟動）兩個服務：
+`docker-compose.yml` 內含三個服務：`postgres`（PostgreSQL 16，資料存於具名 volume `pgdata`，並以 `pg_isready` 做健康檢查）、`backend`（Spring Boot API，`depends_on` 等待資料庫健康後才啟動）、`frontend`（Nginx，`depends_on` 等待後端健康後才啟動）：
 
 ```yaml
 services:
@@ -176,23 +186,41 @@ services:
       timeout: 5s
       retries: 5
 
-  sentinel-cve:
+  backend:
     build:
       context: .
       dockerfile: java-backend/Dockerfile
-    container_name: sentinel-cve-app
+    container_name: sentinel-cve-backend
     restart: always
     depends_on:
       postgres:
         condition: service_healthy
     ports:
-      - "3000:8080"
+      - "5173:5173"
     environment:
-      - PORT=8080
+      - PORT=5173
       - NVD_API_KEY=${NVD_API_KEY:-}
+      - APP_URL=${APP_URL:-http://localhost:8080}
       - DATABASE_URL=postgres://${POSTGRES_USER:-sentinel}:${POSTGRES_PASSWORD:-sentinel}@postgres:5432/${POSTGRES_DB:-sentinel_cve}
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/api/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:5173/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: sentinel-cve-frontend
+    restart: always
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -255,17 +283,17 @@ cp .env.example .env
 接續啟動前後端：
 
 ```bash
-# 前端：安裝套件並啟動 Vite dev server（熱重載，預設 5173）
+# 前端：安裝套件並啟動 Vite dev server（熱重載，預設 8080）
 npm install
 npm run dev
 
-# 後端：另開一個終端機，啟動 Spring Boot（需 Java 21 + Maven）
+# 後端：另開一個終端機，啟動 Spring Boot（需 Java 21 + Maven，預設埠號 5173）
 # 會自動讀取專案根目錄的 .env；若未建立 .env，也可改用 export 設定環境變數
 cd java-backend
 mvn spring-boot:run
 ```
 
-後端啟動於 `http://localhost:8080`，會自動建立所需的資料表 (`CREATE TABLE IF NOT EXISTS`)，無需另外執行 migration。開發模式下前端 Vite dev server 與後端 API 為分離埠號，請自行設定 Vite proxy 或直接呼叫 `http://localhost:8080/api/*`。
+後端啟動於 `http://localhost:5173`，會自動建立所需的資料表 (`CREATE TABLE IF NOT EXISTS`)，無需另外執行 migration。開發模式下前端 Vite dev server（8080）會透過 `vite.config.ts` 內建的 proxy 設定自動把 `/api/*` 轉送到後端（5173），無需額外設定。
 
 > 💡 **快速驗證**：前端載入後，若總覽儀表板（Dashboard）出現「資料庫未連線」提示 banner，代表後端無法連上 PostgreSQL，請依序檢查：(1) 資料庫本身是否已啟動（`docker ps` 或 `vagrant status`）、(2) `.env` 的 `DATABASE_URL` 主機/Port 是否正確、(3) 修改 `.env` 後是否已重新啟動後端服務（Spring Boot 只會在啟動時讀取一次環境變數）。
 
@@ -284,13 +312,13 @@ cp .env.example .env
 docker-compose up -d --build
 ```
 
-訪問 `http://localhost:3000` 即可登入使用。
+訪問 `http://localhost:8080` 即可登入使用（前端容器會自動把 `/api/*` 請求 proxy 到後端容器，無需額外設定）。
 
 ---
 
 ### 3. 使用 Docker CLI 手動建置與執行
 
-若不使用 Docker Compose，可直接透過 `docker` 命令操作，但需自行先啟動一個 PostgreSQL 並建立共用網路：
+若不使用 Docker Compose，可直接透過 `docker` 命令操作，但需自行先啟動一個 PostgreSQL、建立共用網路，並分別建置/執行前後端兩個容器：
 
 ```bash
 # 建立共用網路，並啟動 PostgreSQL 容器
@@ -300,19 +328,28 @@ docker run -d --name sentinel-cve-db --network sentinel-net \
   -v sentinel-cve-pgdata:/var/lib/postgresql/data \
   postgres:16-alpine
 
-# 建置 Docker 映像檔（使用 java-backend/Dockerfile）
-docker build -f java-backend/Dockerfile -t sentinel-cve:latest .
+# 建置並執行後端容器 (使用 java-backend/Dockerfile)
+docker build -f java-backend/Dockerfile -t sentinel-cve-backend:latest .
 
-# 執行容器 (帶入 NVD_API_KEY 與 DATABASE_URL)
+# 執行後端容器 (帶入 NVD_API_KEY 與 DATABASE_URL)
 docker run -d \
-  --name sentinel-cve-app \
+  --name backend \
   --network sentinel-net \
-  -p 3000:8080 \
+  -p 5173:5173 \
   -e NVD_API_KEY="your_nvd_api_key_here" \
-  -e PORT=8080 \
+  -e PORT=5173 \
   -e DATABASE_URL="postgres://sentinel:sentinel@sentinel-cve-db:5432/sentinel_cve" \
   --restart always \
-  sentinel-cve:latest
+  sentinel-cve-backend:latest
+
+# 建置並執行前端容器 (使用 Dockerfile.frontend；容器名稱需為 "backend" 才能被 nginx.frontend.conf 的 proxy_pass 解析到)
+docker build -f Dockerfile.frontend -t sentinel-cve-frontend:latest .
+docker run -d \
+  --name sentinel-cve-frontend \
+  --network sentinel-net \
+  -p 8080:8080 \
+  --restart always \
+  sentinel-cve-frontend:latest
 ```
 
 ---
@@ -338,16 +375,23 @@ docker image prune -f
 
 **查看即時應用程式與背景排程日誌**：
 ```bash
-docker-compose logs -f sentinel-cve
+docker-compose logs -f backend
+docker-compose logs -f frontend
 ```
 
 **確認容器健康狀態 (Health status)**：
 ```bash
-docker inspect --format='{{json .State.Health}}' sentinel-cve-app
+docker inspect --format='{{json .State.Health}}' sentinel-cve-backend
+docker inspect --format='{{json .State.Health}}' sentinel-cve-frontend
 ```
 
 **手動測試健康檢查 Endpoint**：
 ```bash
-curl -I http://localhost:3000/api/health
+# 前端頁面
+curl -I http://localhost:8080/
+# 經由前端 nginx proxy 打到後端
+curl -I http://localhost:8080/api/health
+# 直接打後端容器
+curl -I http://localhost:5173/api/health
 ```
-若回傳 `HTTP/1.1 200 OK` 且包含 `{"status":"ok"}` 即代表服務正常運作！
+若皆回傳 `HTTP/1.1 200 OK`（`/api/health` 並包含 `{"status":"ok"}`）即代表前後端服務與 proxy 皆正常運作！
