@@ -128,6 +128,10 @@ public class ScanService {
             }
         }
 
+        // Full-replace snapshot: this binding's CVE list reflects only this scan's results, so a
+        // fixed/upgraded version correctly drops stale CVEs while other bindings of the same
+        // product at a different (still-vulnerable) version remain unaffected.
+        binding.setCves(new ArrayList<>(found.values()));
         binding.setDetectedCveCount(found.size());
         binding.setLastScannedAt(Instant.now().toString());
         return new ArrayList<>(found.values());

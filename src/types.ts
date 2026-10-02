@@ -131,6 +131,7 @@ export interface ProjectProductBinding {
   lastScannedAt?: string;
   detectedCveCount?: number;
   activeAlertCount?: number;
+  cves?: CVEItem[]; // Full snapshot of CVEs found by this binding's most recent scan (per-project/per-version isolated)
 }
 
 export interface Project {

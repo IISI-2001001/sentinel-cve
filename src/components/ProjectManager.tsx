@@ -63,12 +63,12 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   // Navigation level state: null = Level 1 (Summary List), Project = Level 2 (Project Detail & Settings)
   const [activeProjectDetail, setActiveProjectDetail] = useState<Project | null>(null);
   const [activeDetailSubTab, setActiveDetailSubTab] = useState<
-    'general' | 'environments' | 'notifications' | 'products' | 'version-matrix' | 'vulnerabilities'
+    'general' | 'environments' | 'notifications' | 'products' | 'vulnerabilities'
   >('general');
 
   // "使用產品清單" tab: environment filter (tabs generated from project's deploymentEnvironments) + table sorting
   const [productsEnvFilter, setProductsEnvFilter] = useState<string>('ALL');
-  type ProductsSortKey = 'name' | 'version' | 'environment' | 'cveCount' | 'lastScanned';
+  type ProductsSortKey = 'name' | 'version' | 'latestVersion' | 'environment' | 'cveCount' | 'lastScanned';
   const [productsSortKey, setProductsSortKey] = useState<ProductsSortKey | null>(null);
   const [productsSortDir, setProductsSortDir] = useState<'asc' | 'desc'>('asc');
 
@@ -148,10 +148,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   const [waiveReasonInput, setWaiveReasonInput] = useState('');
   const [waivedByInput, setWaivedByInput] = useState('');
 
-  // Ignored Product Upgrade IDs & Ignored CVE IDs state per project
-  const [ignoredProductIds, setIgnoredProductIds] = useState<string[]>([]);
-  const [ignoredCveIds, setIgnoredCveIds] = useState<string[]>([]);
-
   // Assign Ticket Modal State
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [assignTarget, setAssignTarget] = useState<{
@@ -169,18 +165,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   const [assignPriority, setAssignPriority] = useState<TicketPriority>('HIGH');
   const [assignCustomTitle, setAssignCustomTitle] = useState('');
   const [isCreatingTicket, setIsCreatingTicket] = useState(false);
-
-  const toggleIgnoreProduct = (productId: string) => {
-    setIgnoredProductIds((prev) =>
-      prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId]
-    );
-  };
-
-  const toggleIgnoreCve = (cveId: string) => {
-    setIgnoredCveIds((prev) =>
-      prev.includes(cveId) ? prev.filter((id) => id !== cveId) : [...prev, cveId]
-    );
-  };
 
   const openAssignProductModal = (product: MonitoredProduct, currentVer: string, recommendedVer: string) => {
     if (!activeProjectDetail) return;
@@ -1021,24 +1005,20 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     const closedTicketsCount = prjTickets.filter((t) => t.status === 'CLOSED').length;
     const waivedTicketsCount = prjTickets.filter((t) => t.status === 'WAIVED').length;
 
-    const effectiveCves = propsCves && propsCves.length > 0 ? propsCves : allCves;
-    const prjCves = effectiveCves.filter((cve) => {
-      const cveProdName = (cve.productName || '').toLowerCase();
-      const cveVendor = (cve.vendorName || '').toLowerCase();
-
-      return prjProducts.some((p) => {
-        const pName = p.name.toLowerCase();
-        const pVendor = (p.vendor || '').toLowerCase();
-        const pCpe = p.cpeKeyword ? p.cpeKeyword.toLowerCase() : '';
-
-        return (
-          cveProdName.includes(pName) ||
-          pName.includes(cveProdName) ||
-          (pCpe && cve.cpe?.some((c) => c.toLowerCase().includes(pCpe))) ||
-          (pVendor && cveVendor.includes(pVendor) && cveProdName.includes(pName))
-        );
+    // CVE candidates are aggregated from each product binding's own latest-scan snapshot
+    // (binding.cves), not from a global fuzzy name/vendor match — this correctly isolates
+    // each project to only the CVEs its own bound product+version actually produced, so a
+    // patched/upgraded binding's resolved CVEs disappear while other projects/bindings still
+    // using a vulnerable version continue to see them.
+    const prjCves = (() => {
+      const merged = new Map<string, CVEItem>();
+      (prj.productBindings || []).forEach((binding) => {
+        (binding.cves || []).forEach((cve) => {
+          if (!merged.has(cve.id)) merged.set(cve.id, cve);
+        });
       });
-    });
+      return Array.from(merged.values());
+    })();
     const maxProjectCvss = prjCves.reduce((max, cve) => Math.max(max, Number(cve.cvss?.baseScore) || 0), 0);
 
     const filteredPrjCves = prjCves.filter((cve) => {
@@ -1056,14 +1036,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
       if (vulnSeverityFilter === 'CISA_KEV') return cve.cisaKev;
       return cve.cvss?.severity === vulnSeverityFilter;
     });
-    const closedVersionProducts = prjProducts.filter((product) => prjTickets.some((ticket) =>
-      ticket.status === 'CLOSED' &&
-      (!ticket.cveList || ticket.cveList.length === 0) &&
-      ticket.affectedProducts.some((name) => name.toLowerCase() === product.name.toLowerCase())
-    ));
-    const activeVersionProducts = prjProducts.filter((product) => !closedVersionProducts.some((closed) => closed.id === product.id));
-    const closedCves = filteredPrjCves.filter((cve) => prjTickets.some((ticket) => ticket.status === 'CLOSED' && ticket.cveList?.some((item) => item.cveId === cve.id)));
-    const activeFilteredPrjCves = filteredPrjCves.filter((cve) => !closedCves.some((closed) => closed.id === cve.id));
 
     return (
       <div className="space-y-6 animate-fade-in">
@@ -1226,18 +1198,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveDetailSubTab('version-matrix')}
-            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              activeDetailSubTab === 'version-matrix'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <RefreshCw className="w-4 h-4" />
-            <span>5. 產品版本與升級對照 ({prjProducts.length})</span>
-          </button>
-
-          <button
             onClick={() => setActiveDetailSubTab('vulnerabilities')}
             className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
               activeDetailSubTab === 'vulnerabilities'
@@ -1246,7 +1206,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
             }`}
           >
             <ShieldAlert className="w-4 h-4" />
-            <span>6. 專案資產弱點列表 ({prjCves.length})</span>
+            <span>5. 專案產品弱點列表 ({prjCves.length})</span>
           </button>
         </div>
 
@@ -1333,7 +1293,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                         setNewProjectEnvName('');
                       }
                     }}
-                    placeholder="輸入新的部署環境名稱，例如 DR"
+                    placeholder="輸入新的部署環境名稱"
                     className="flex-1 bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-medium focus:outline-none focus:border-blue-500 shadow-2xs"
                   />
                   <button
@@ -1455,6 +1415,10 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     valA = (bindingA?.targetVersion || a.currentVersion || '').toLowerCase();
                     valB = (bindingB?.targetVersion || b.currentVersion || '').toLowerCase();
                     break;
+                  case 'latestVersion':
+                    valA = (a.latestVersion || '').toLowerCase();
+                    valB = (b.latestVersion || '').toLowerCase();
+                    break;
                   case 'environment':
                     valA = (bindingA?.environment || '').toLowerCase();
                     valB = (bindingB?.environment || '').toLowerCase();
@@ -1512,6 +1476,12 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                         </button>
                       </th>
                       <th className="px-4 py-3">
+                        <button onClick={() => toggleProductsSort('latestVersion')} className="flex items-center gap-1 hover:text-blue-700">
+                          <span>最新發行版本</span>
+                          {renderProductsSortIcon('latestVersion')}
+                        </button>
+                      </th>
+                      <th className="px-4 py-3">
                         <button onClick={() => toggleProductsSort('environment')} className="flex items-center gap-1 hover:text-blue-700">
                           <span>部署環境</span>
                           {renderProductsSortIcon('environment')}
@@ -1546,6 +1516,10 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
 
                           <td className="px-4 py-3.5">
                             <span className="font-mono font-bold text-blue-700 text-xs">{effectiveVersion}</span>
+                          </td>
+
+                          <td className="px-4 py-3.5">
+                            <span className="font-mono text-xs text-slate-600">{p.latestVersion || '尚無資料'}</span>
                           </td>
 
                           <td className="px-4 py-3.5">
@@ -1860,241 +1834,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
           </div>
         )}
 
-        {/* SUB TAB 4: Version Matrix & Upgrade Recommendations */}
-        {activeDetailSubTab === 'version-matrix' && (
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs space-y-6">
-            <div className="border-b border-slate-200 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-900 flex items-center space-x-2">
-                  <RefreshCw className="w-4 h-4 text-indigo-600" />
-                  <span>專案所有產品版本資訊、最新版本與建議升級版本對照</span>
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  列出此專案套用之資產套件版本、官方最新發行版號及建議修補安全版本對照表
-                </p>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <button onClick={() => handleManualProjectNotify(prj, 'VERSION')} disabled={manualNotifyKind !== null} className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs inline-flex items-center gap-1.5 disabled:opacity-50">
-                  <Send className={`w-3.5 h-3.5 ${manualNotifyKind === 'VERSION' ? 'animate-pulse' : ''}`} />
-                  {manualNotifyKind === 'VERSION' ? '發送中...' : '手動發送版本通知'}
-                </button>
-                <span className="px-3 py-1 rounded-xl bg-blue-50 text-blue-700 font-bold text-xs border border-blue-200">
-                  專案綁定產品: {prjProducts.length} 個
-                </span>
-              </div>
-            </div>
-
-            {prjProducts.length === 0 ? (
-              <div className="p-8 text-center text-slate-500 border border-dashed border-slate-200 rounded-2xl">
-                <Boxes className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="text-xs font-semibold text-slate-700">該專案尚未綁定任何監控產品</p>
-                <p className="text-[11px] text-slate-400 mt-1">請至「2. 使用產品清單」分頁新增產品並設定套用版號。</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {/* Metric summary banner */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-3.5 flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-bold text-emerald-800 block">已是最新安全版本</span>
-                      <span className="text-xs text-emerald-600">無修補升級需求</span>
-                    </div>
-                    <span className="text-xl font-black text-emerald-700">
-                      {prjProducts.filter((p) => {
-                        const binding = (prj.productBindings || []).find((b) => b.productId === p.id);
-                        const current = binding?.targetVersion || p.currentVersion || '1.0.0';
-                        const secure = p.latestSecureVersion || p.latestVersion || current;
-                        return current === secure;
-                      }).length}
-                    </span>
-                  </div>
-
-                  <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-3.5 flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-bold text-amber-800 block">建議升級安全版本</span>
-                      <span className="text-xs text-amber-600">包含已知漏洞修補</span>
-                    </div>
-                    <span className="text-xl font-black text-amber-700">
-                      {prjProducts.filter((p) => {
-                        const binding = (prj.productBindings || []).find((b) => b.productId === p.id);
-                        const current = binding?.targetVersion || p.currentVersion || '1.0.0';
-                        const secure = p.latestSecureVersion || p.latestVersion || current;
-                        return current !== secure;
-                      }).length}
-                    </span>
-                  </div>
-
-                  <div className="bg-blue-50/60 border border-blue-200 rounded-xl p-3.5 flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-bold text-blue-800 block">偵測弱點總計</span>
-                      <span className="text-xs text-blue-600">產品對應 CVE 數量</span>
-                    </div>
-                    <span className="text-xl font-black text-blue-700">
-                      {prjProducts.reduce((acc, p) => acc + (p.detectedCveCount || 0), 0)} 個
-                    </span>
-                  </div>
-                </div>
-
-                {/* Detailed Version Table */}
-                <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
-                      <tr>
-                        <th className="px-4 py-3">產品名稱</th>
-                        <th className="px-4 py-3">專案套用版本</th>
-                        <th className="px-4 py-3">最新發行版本</th>
-                        <th className="px-4 py-3">建議升級版本</th>
-                        <th className="px-4 py-3">升級狀態與說明</th>
-                        <th className="px-4 py-3 text-right">處置與派單</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 bg-white">
-                      {activeVersionProducts.map((p) => {
-                        const binding = (prj.productBindings || []).find((b) => b.productId === p.id);
-                        const currentVer = binding?.targetVersion || p.currentVersion || '1.0.0';
-                        const latestVer = p.latestVersion || p.currentVersion || '1.0.0';
-                        const recommendedVer = p.latestSecureVersion || p.latestVersion || currentVer;
-                        const needsUpgrade = currentVer !== recommendedVer;
-                        const isIgnored = ignoredProductIds.includes(p.id);
-                        const linkedTicket = prjTickets.find((ticket) =>
-                          ticket.affectedProducts.some((name) => name.toLowerCase() === p.name.toLowerCase()) &&
-                          (!ticket.cveList || ticket.cveList.length === 0)
-                        );
-                        const ticketStatus = linkedTicket ? getTicketStatusMeta(linkedTicket.status) : null;
-
-                        return (
-                          <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
-                            <td className="px-4 py-3.5">
-                              <div className="font-extrabold text-slate-900 text-sm">{p.name}</div>
-                              <div className="text-[11px] text-slate-400 mt-0.5">
-                                <span>{p.category}</span>
-                              </div>
-                            </td>
-
-                            <td className="px-4 py-3.5 font-mono font-bold text-blue-700 text-xs">
-                              <div className="inline-flex items-center space-x-1.5 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-lg">
-                                <span>{currentVer}</span>
-                                {binding?.environment && (
-                                  <span className="text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.2 rounded font-sans">
-                                    {binding.environment}
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-
-                            <td className="px-4 py-3.5 font-mono text-slate-700 font-semibold">
-                              {latestVer}
-                            </td>
-
-                            <td className="px-4 py-3.5 font-mono">
-                              <span className={`font-bold px-2.5 py-1 rounded-lg border ${
-                                needsUpgrade
-                                  ? 'bg-amber-50 text-amber-800 border-amber-300'
-                                  : 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                              }`}>
-                                {recommendedVer}
-                              </span>
-                            </td>
-
-                            <td className="px-4 py-3.5">
-                              {needsUpgrade ? (
-                                <div className="space-y-1">
-                                  <span className="inline-flex items-center space-x-1 text-[11px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                                    <AlertTriangle className="w-3 h-3 text-amber-600" />
-                                    <span>建議升級修補 ({p.detectedCveCount} 個已知 CVE)</span>
-                                  </span>
-                                  {p.updateNotes && (
-                                    <p className="text-[11px] text-slate-500 line-clamp-1">{p.updateNotes}</p>
-                                  )}
-                                  {linkedTicket && ticketStatus && (
-                                    <button onClick={() => setSelectedTicket(linkedTicket)} className={`inline-flex px-2 py-0.5 rounded border text-[11px] font-bold ${ticketStatus.className}`}>
-                                      工單 {linkedTicket.ticketNo}：{ticketStatus.label}
-                                    </button>
-                                  )}
-                                </div>
-                              ) : (
-                                <span className="inline-flex items-center space-x-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                  <span>已為最新安全版本</span>
-                                </span>
-                              )}
-                            </td>
-
-                            <td className="px-4 py-3.5 text-right">
-                              <div className="flex items-center justify-end space-x-1.5">
-                                {isIgnored ? (
-                                  <>
-                                    <span className="px-2 py-1 rounded-lg bg-slate-100 text-slate-500 font-bold text-[11px]">
-                                      已忽略修補
-                                    </span>
-                                    <button
-                                      onClick={() => toggleIgnoreProduct(p.id)}
-                                      className="px-2.5 py-1 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-[11px] transition-colors"
-                                    >
-                                      取消忽略
-                                    </button>
-                                  </>
-                                ) : linkedTicket && ticketStatus ? (
-                                  <>
-                                    <span className={`px-2 py-1 rounded-lg border font-bold text-[11px] ${ticketStatus.className}`}>
-                                      {ticketStatus.label}
-                                    </span>
-                                    <button onClick={() => setSelectedTicket(linkedTicket)} className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-bold text-[11px]">
-                                      查看工單
-                                    </button>
-                                  </>
-                                ) : (
-                                  <>
-                                    <button
-                                      onClick={() => toggleIgnoreProduct(p.id)}
-                                      className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-[11px] transition-colors"
-                                      title="忽略此升級"
-                                    >
-                                      忽略
-                                    </button>
-                                    <button
-                                      onClick={() => openAssignProductModal(p, currentVer, recommendedVer)}
-                                      className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] flex items-center space-x-1 shadow-2xs transition-colors"
-                                      title="彈出指派視窗派發修補工單"
-                                    >
-                                      <Send className="w-3 h-3" />
-                                      <span>派單</span>
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                {closedVersionProducts.length > 0 && (
-                  <div className="rounded-2xl border border-slate-300 bg-slate-100/70 p-4 space-y-3">
-                    <div>
-                      <h4 className="text-xs font-extrabold text-slate-800">已結案版本項目（不再通知）</h4>
-                      <p className="text-[11px] text-slate-500 mt-0.5">對應工單已結案，自動、排程與手動版本通知均會排除這些項目。</p>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {closedVersionProducts.map((product) => {
-                        const ticket = prjTickets.find((item) => item.status === 'CLOSED' && (!item.cveList || item.cveList.length === 0) && item.affectedProducts.some((name) => name.toLowerCase() === product.name.toLowerCase()));
-                        return <button key={product.id} onClick={() => ticket && setSelectedTicket(ticket)} className="text-left rounded-xl bg-white border border-slate-300 p-3 hover:border-slate-500">
-                          <div className="font-bold text-slate-800 text-xs">{product.name}</div>
-                          <div className="text-[11px] text-slate-500 mt-1">{ticket?.ticketNo || '工單'} · 已結案 · 不再通知</div>
-                        </button>;
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* SUB TAB 5: Project Asset Vulnerabilities List */}
+        {/* SUB TAB 4: Project Product Vulnerabilities List */}
         {activeDetailSubTab === 'vulnerabilities' && (
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs space-y-6">
             <div className="border-b border-slate-200 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -2155,7 +1895,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
             </div>
 
             {/* Filtered CVE list */}
-            {activeFilteredPrjCves.length === 0 ? (
+            {filteredPrjCves.length === 0 ? (
               <div className="p-10 text-center text-slate-500 border border-dashed border-slate-200 rounded-2xl space-y-2">
                 <ShieldCheck className="w-10 h-10 text-emerald-500 mx-auto" />
                 <p className="text-sm font-bold text-slate-800">目前專案產品未發現符合條件之 CVE 弱點</p>
@@ -2163,12 +1903,9 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               </div>
             ) : (
               <div className="space-y-3">
-                {activeFilteredPrjCves.map((cve) => {
+                {filteredPrjCves.map((cve) => {
                   const cvssScore = cve.cvss?.baseScore || 0;
                   const severity = cve.cvss?.severity || 'LOW';
-                  const isCveIgnored = ignoredCveIds.includes(cve.id);
-                  const linkedTicket = prjTickets.find((ticket) => ticket.cveList?.some((item) => item.cveId === cve.id));
-                  const ticketStatus = linkedTicket ? getTicketStatusMeta(linkedTicket.status) : null;
 
                   let sevColor = 'bg-slate-100 text-slate-700 border-slate-200';
                   if (severity === 'CRITICAL') sevColor = 'bg-rose-50 text-rose-800 border-rose-300';
@@ -2178,11 +1915,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   return (
                     <div
                       key={cve.id}
-                      className={`border rounded-2xl p-4 shadow-2xs transition-all space-y-3 ${
-                        isCveIgnored
-                          ? 'bg-slate-100/60 border-slate-300 opacity-75'
-                          : 'bg-slate-50/70 border-slate-200 hover:border-blue-300'
-                      }`}
+                      className="border rounded-2xl p-4 shadow-2xs transition-all space-y-3 bg-slate-50/70 border-slate-200 hover:border-blue-300"
                     >
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-2.5">
                         <div className="flex items-center space-x-2 flex-wrap gap-y-1">
@@ -2204,17 +1937,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                               <span>CISA KEV 已遭威脅者利用</span>
                             </span>
                           )}
-
-                          {isCveIgnored && (
-                            <span className="px-2 py-0.5 rounded-lg text-xs font-bold bg-slate-200 text-slate-700 border border-slate-300">
-                              已忽略弱點處置
-                            </span>
-                          )}
-                          {linkedTicket && ticketStatus && (
-                            <button onClick={() => setSelectedTicket(linkedTicket)} className={`px-2 py-0.5 rounded-lg text-xs font-bold border ${ticketStatus.className}`}>
-                              工單 {linkedTicket.ticketNo}：{ticketStatus.label}
-                            </button>
-                          )}
                         </div>
 
                         <div className="text-[11px] text-slate-400 font-mono">
@@ -2234,75 +1956,9 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
 
                         <p className="text-xs text-slate-700 leading-relaxed">{cve.description}</p>
                       </div>
-
-                      {/* Ignore / Assign Action Bar */}
-                      <div className="flex items-center justify-between pt-2 border-t border-slate-200/80">
-                        <div className="flex items-center space-x-2">
-                          {isCveIgnored ? (
-                            <span className="inline-flex items-center space-x-1 text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
-                              <CheckCircle2 className="w-3 h-3 text-slate-400" />
-                              <span>此弱點項目已設定為忽略</span>
-                            </span>
-                          ) : linkedTicket && ticketStatus ? (
-                            <button onClick={() => setSelectedTicket(linkedTicket)} className="px-3.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs flex items-center space-x-1">
-                              <FileText className="w-3 h-3" />
-                              <span>查看工單（{ticketStatus.label}）</span>
-                            </button>
-                          ) : (
-                            <span className="text-[11px] text-slate-400 font-medium">
-                              可指派成員建立修補工單並追蹤處置進度
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center space-x-2">
-                          {isCveIgnored ? (
-                            <button
-                              onClick={() => toggleIgnoreCve(cve.id)}
-                              className="px-2.5 py-1 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs transition-colors"
-                            >
-                              取消忽略
-                            </button>
-                          ) : (
-                            <>
-                              <button
-                                onClick={() => toggleIgnoreCve(cve.id)}
-                                className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs transition-colors"
-                              >
-                                忽略弱點
-                              </button>
-                              <button
-                                onClick={() => openAssignCveModal(cve)}
-                                className="px-3.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center space-x-1 shadow-2xs transition-colors"
-                              >
-                                <Send className="w-3 h-3" />
-                                <span>派發處置工單</span>
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
                     </div>
                   );
                 })}
-              </div>
-            )}
-
-            {closedCves.length > 0 && (
-              <div className="rounded-2xl border border-slate-300 bg-slate-100/70 p-4 space-y-3">
-                <div>
-                  <h4 className="text-xs font-extrabold text-slate-800">已結案 CVE（不再通知）</h4>
-                  <p className="text-[11px] text-slate-500 mt-0.5">對應工單已結案，後續即時、排程與手動 CVE 通知均會排除。</p>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {closedCves.map((cve) => {
-                    const ticket = prjTickets.find((item) => item.status === 'CLOSED' && item.cveList?.some((entry) => entry.cveId === cve.id));
-                    return <button key={cve.id} onClick={() => ticket && setSelectedTicket(ticket)} className="text-left rounded-xl bg-white border border-slate-300 p-3 hover:border-slate-500">
-                      <div className="flex items-center justify-between gap-2"><span className="font-mono font-bold text-slate-800 text-xs">{cve.id}</span><span className="text-[10px] font-bold text-slate-600">CVSS {cve.cvss?.baseScore || 0}</span></div>
-                      <div className="text-[11px] text-slate-500 mt-1">{ticket?.ticketNo || '工單'} · 已結案 · 不再通知</div>
-                    </button>;
-                  })}
-                </div>
               </div>
             )}
           </div>

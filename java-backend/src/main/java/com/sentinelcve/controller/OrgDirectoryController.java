@@ -70,8 +70,11 @@ public class OrgDirectoryController {
 
     @PutMapping("/project-managers/{id}")
     public ResponseEntity<?> updateProjectManager(@PathVariable String id, @RequestBody(required = false) Map<String, Object> body) {
-        String email = asString(safeBody(body).get("email"));
-        Map<String, Object> entry = persistenceRepository.updateProjectManager(id, hasText(email) ? email.trim() : null);
+        Map<String, Object> safe = safeBody(body);
+        String name = asString(safe.get("name"));
+        String email = asString(safe.get("email"));
+        Map<String, Object> entry = persistenceRepository.updateProjectManager(
+            id, hasText(name) ? name.trim() : null, hasText(email) ? email.trim() : null);
         return ResponseEntity.ok(entry);
     }
 

@@ -113,15 +113,20 @@ public class ProjectDigestService {
             .filter(p -> Boolean.TRUE.equals(p.getHasUpdateAvailable()) && !alertRuleEngineService.hasClosedVersionTicket(project.getId(), p.getName()))
             .toList();
         List<ProjectProductBinding> projectBindings = project.getProductBindings() != null ? project.getProductBindings() : List.of();
-        List<CveItem> cveItems;
-        synchronized (state.lock) {
-            cveItems = state.cvesDatabase.stream()
-                .filter(c -> projectBindings.stream().anyMatch(b -> b.getProductName().equalsIgnoreCase(c.getProductName())))
-                .filter(c -> c.getCvss().getBaseScore() >= project.getNotifyMinCvss())
-                .filter(c -> !project.isNotifyCisaKevOnly() || c.isCisaKev())
-                .filter(c -> !alertRuleEngineService.hasClosedCveTicket(project.getId(), c.getId()))
-                .toList();
+        // CVE candidates come from each binding's own latest-scan snapshot (cveList), not the
+        // global cvesDatabase, so a project only sees CVEs that its own bound product+version
+        // actually produced — correctly isolating it from other projects using the same product
+        // name at a different (still-vulnerable or already-patched) version.
+        java.util.LinkedHashMap<String, CveItem> mergedCves = new java.util.LinkedHashMap<>();
+        for (ProjectProductBinding b : projectBindings) {
+            if (b.getCves() == null) continue;
+            for (CveItem c : b.getCves()) mergedCves.putIfAbsent(c.getId(), c);
         }
+        List<CveItem> cveItems = mergedCves.values().stream()
+            .filter(c -> c.getCvss().getBaseScore() >= project.getNotifyMinCvss())
+            .filter(c -> !project.isNotifyCisaKevOnly() || c.isCisaKev())
+            .filter(c -> !alertRuleEngineService.hasClosedCveTicket(project.getId(), c.getId()))
+            .toList();
 
         DigestResult empty = new DigestResult();
         List<?> items = isVersion ? versionItems : cveItems;

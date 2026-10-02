@@ -210,8 +210,12 @@ public class PersistenceRepository {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
-    public java.util.Map<String, Object> updateProjectManager(String id, String email) {
-        jdbc.update("UPDATE project_managers SET email = ? WHERE id = ?", email, id);
+    public java.util.Map<String, Object> updateProjectManager(String id, String name, String email) {
+        if (name != null) {
+            jdbc.update("UPDATE project_managers SET name = ?, email = ? WHERE id = ?", name, email, id);
+        } else {
+            jdbc.update("UPDATE project_managers SET email = ? WHERE id = ?", email, id);
+        }
         List<java.util.Map<String, Object>> rows = jdbc.query(
             "SELECT id, name, email, created_at FROM project_managers WHERE id = ?", orgEntryMapperWithEmail(), id);
         return rows.isEmpty() ? null : rows.get(0);

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Building2, UserCheck, Plus, Trash2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Building2, UserCheck, Plus, Trash2, AlertCircle, CheckCircle2, Pencil, Check, X } from 'lucide-react';
 
 interface OrgEntry {
   id: string;
@@ -26,6 +26,9 @@ export const OrgDirectoryManager: React.FC = () => {
   const [savingDept, setSavingDept] = useState(false);
   const [savingPm, setSavingPm] = useState(false);
   const [savingEmailId, setSavingEmailId] = useState<string | null>(null);
+  const [editingPmId, setEditingPmId] = useState<string | null>(null);
+  const [editPmName, setEditPmName] = useState('');
+  const [editPmEmail, setEditPmEmail] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -104,23 +107,40 @@ export const OrgDirectoryManager: React.FC = () => {
     }
   };
 
-  const handleUpdateProjectManagerEmail = async (entry: OrgEntry, email: string) => {
-    if ((entry.email || '') === email) return;
+  const handleStartEditProjectManager = (entry: OrgEntry) => {
+    setEditingPmId(entry.id);
+    setEditPmName(entry.name);
+    setEditPmEmail(entry.email || '');
+    setError(null);
+  };
+
+  const handleCancelEditProjectManager = () => {
+    setEditingPmId(null);
+    setEditPmName('');
+    setEditPmEmail('');
+  };
+
+  const handleSaveProjectManager = async (entry: OrgEntry) => {
+    if (!editPmName.trim()) {
+      setError('姓名不可為空白');
+      return;
+    }
     setSavingEmailId(entry.id);
     setError(null);
     try {
       const res = await fetch(`/api/org-directory/project-managers/${encodeURIComponent(entry.id)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ name: editPmName.trim(), email: editPmEmail.trim() }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || `更新失敗 (HTTP ${res.status})`);
       }
+      setEditingPmId(null);
       await load();
     } catch (err: any) {
-      setError(err.message || '更新 Email 失敗');
+      setError(err.message || '更新使用者失敗');
     } finally {
       setSavingEmailId(null);
     }
@@ -244,27 +264,72 @@ export const OrgDirectoryManager: React.FC = () => {
               <div className="px-4 py-6 text-center text-slate-400 text-xs">尚無使用者資料，請於上方新增。</div>
             )}
             {!loading &&
-              projectManagers.map((entry) => (
-                <div key={entry.id} className="flex items-center justify-between gap-2 px-4 py-2.5 hover:bg-slate-50/60">
-                  <span className="text-xs font-bold text-slate-900 shrink-0">{entry.name}</span>
-                  <input
-                    type="email"
-                    defaultValue={entry.email || ''}
-                    placeholder="尚未設定 Email"
-                    disabled={savingEmailId === entry.id}
-                    onBlur={(e) => handleUpdateProjectManagerEmail(entry, e.target.value.trim())}
-                    className="flex-1 min-w-0 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-blue-500 placeholder:text-slate-400"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteProjectManager(entry)}
-                    className="p-1.5 rounded-lg hover:bg-red-50 text-red-600 shrink-0"
-                    title="刪除"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
+              projectManagers.map((entry) => {
+                const isEditing = editingPmId === entry.id;
+                const isSaving = savingEmailId === entry.id;
+                if (isEditing) {
+                  return (
+                    <div key={entry.id} className="flex items-center justify-between gap-2 px-4 py-2.5 bg-blue-50/40">
+                      <input
+                        type="text"
+                        value={editPmName}
+                        onChange={(e) => setEditPmName(e.target.value)}
+                        placeholder="姓名"
+                        className="w-28 shrink-0 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-blue-500"
+                      />
+                      <input
+                        type="email"
+                        value={editPmEmail}
+                        onChange={(e) => setEditPmEmail(e.target.value)}
+                        placeholder="尚未設定 Email"
+                        className="flex-1 min-w-0 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-blue-500 placeholder:text-slate-400"
+                      />
+                      <button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={() => handleSaveProjectManager(entry)}
+                        className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-600 shrink-0 disabled:opacity-50"
+                        title="儲存"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={handleCancelEditProjectManager}
+                        className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500 shrink-0 disabled:opacity-50"
+                        title="取消"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={entry.id} className="flex items-center justify-between gap-2 px-4 py-2.5 hover:bg-slate-50/60">
+                    <span className="text-xs font-bold text-slate-900 shrink-0">{entry.name}</span>
+                    <span className="flex-1 min-w-0 text-xs text-slate-600 font-medium truncate">
+                      {entry.email || <span className="text-slate-400">尚未設定 Email</span>}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleStartEditProjectManager(entry)}
+                      className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600 shrink-0"
+                      title="編輯"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteProjectManager(entry)}
+                      className="p-1.5 rounded-lg hover:bg-red-50 text-red-600 shrink-0"
+                      title="刪除"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
           </div>
         </div>
       </div>
