@@ -13,7 +13,6 @@ import {
   AlertCircle,
   FolderKanban,
   Layers,
-  MessageSquare,
 } from 'lucide-react';
 import { MonitoredProduct, CVEItem, AlertNotification, Project } from '../types';
 
@@ -45,7 +44,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const lowCount = cves.filter((c) => c.cvss.severity === 'LOW').length;
   const cisaKevCount = cves.filter((c) => c.cisaKev).length;
   const totalCves = cves.length;
-  const projectDepartments = Array.from(new Set(projects.map((p) => p.department || '未分類')));
+  const uniqueProductCount = new Set(projects.flatMap((p) => p.productIds || [])).size;
 
   const getProductStatus = (product: MonitoredProduct) => {
     const alertCount = activeAlerts.filter((alert) => alert.productName.toLowerCase() === product.name.toLowerCase()).length;
@@ -87,17 +86,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <FolderKanban className="w-4 h-4 text-blue-600" />
           <span>專案管理總覽指標</span>
         </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div
             onClick={() => onNavigateTab('projects')}
             className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:border-blue-400 hover:shadow-md transition-all cursor-pointer"
           >
             <div className="text-xs text-slate-500 font-semibold mb-1 flex items-center justify-between">
-              <span>納管專案總數</span>
+              <span>專案總數</span>
               <FolderKanban className="w-4 h-4 text-blue-600" />
             </div>
             <div className="text-2xl font-black text-slate-900">{projects.length} 個專案</div>
-            <p className="text-[11px] text-slate-400 mt-1">涵蓋 {projectDepartments.length} 個事業群部門</p>
           </div>
 
           <div
@@ -105,41 +103,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
             className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:border-indigo-400 hover:shadow-md transition-all cursor-pointer"
           >
             <div className="text-xs text-slate-500 font-semibold mb-1 flex items-center justify-between">
-              <span>產品套用綁定總數</span>
+              <span>產品使用總數</span>
               <Layers className="w-4 h-4 text-indigo-600" />
             </div>
-            <div className="text-2xl font-black text-indigo-600">
-              {projects.reduce((sum, p) => sum + (p.productIds?.length || 0), 0)} 次套用
-            </div>
+            <div className="text-2xl font-black text-indigo-600">{uniqueProductCount} 項產品</div>
             <p className="text-[11px] text-slate-400 mt-1">具備獨立特定版本號套用</p>
-          </div>
-
-          <div
-            onClick={() => onNavigateTab('projects')}
-            className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:border-emerald-400 hover:shadow-md transition-all cursor-pointer"
-          >
-            <div className="text-xs text-slate-500 font-semibold mb-1 flex items-center justify-between">
-              <span>即時觸發通報專案</span>
-              <Zap className="w-4 h-4 text-emerald-600" />
-            </div>
-            <div className="text-2xl font-black text-emerald-600">
-              {projects.filter((p) => !p.notifyFrequency || p.notifyFrequency === 'REALTIME').length} 個專案
-            </div>
-            <p className="text-[11px] text-slate-400 mt-1">發現高危漏洞當下立即推送</p>
-          </div>
-
-          <div
-            onClick={() => onNavigateTab('projects')}
-            className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:border-purple-400 hover:shadow-md transition-all cursor-pointer"
-          >
-            <div className="text-xs text-slate-500 font-semibold mb-1 flex items-center justify-between">
-              <span>Teams 頻道串接率</span>
-              <MessageSquare className="w-4 h-4 text-purple-600" />
-            </div>
-            <div className="text-2xl font-black text-purple-700">
-              {projects.filter((p) => Boolean(p.teamsWebhookUrl)).length} / {projects.length}
-            </div>
-            <p className="text-[11px] text-slate-400 mt-1">已設定專屬 Teams Webhook</p>
           </div>
         </div>
       </div>
